@@ -1,7 +1,9 @@
 import { Link, Route, Routes } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth-context";
 import LoginPage from "@/pages/Login";
+import ProductManagementPage from "@/pages/ProductManagement";
 import RegisterPage from "@/pages/Register";
 
 function LandingPage() {
@@ -26,6 +28,11 @@ function LandingPage() {
           <span className="font-mono text-xs text-muted-foreground">INR · TEST MODE</span>
           {isReady && user ? (
             <>
+              {user.role === "merchant_admin" && (
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/products">Catalog</Link>
+                </Button>
+              )}
               <span className="font-mono text-xs text-foreground">{user.email}</span>
               <Button type="button" variant="outline" size="sm" onClick={() => void logout()}>
                 Sign out
@@ -91,6 +98,14 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route
+        path="/products"
+        element={
+          <ProtectedRoute roles={["merchant_admin"]}>
+            <ProductManagementPage />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 }

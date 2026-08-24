@@ -3,6 +3,7 @@ import cors from "cors";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import type { Env } from "./config/env";
 import { createAuthRouter } from "./modules/auth/auth.routes";
+import { createCatalogRouter } from "./modules/catalog/catalog.routes";
 
 export type AppConfig = Pick<
   Env,
@@ -41,6 +42,7 @@ export function createApp(config: AppConfig): Express {
   });
 
   app.use("/auth", createAuthRouter());
+  app.use(createCatalogRouter());
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     const message = err instanceof Error ? err.message : "Internal error";

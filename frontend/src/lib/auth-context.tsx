@@ -15,6 +15,7 @@ export type AuthUser = {
   email: string;
   role: string;
   name: string | null;
+  merchantId: string | null;
 };
 
 type AuthContextValue = {

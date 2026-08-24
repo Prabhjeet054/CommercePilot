@@ -68,7 +68,9 @@ describe("Prisma schema constraints", () => {
     await prisma.purchaseIntent.deleteMany({
       where: { rawText: "buy running shoes under 5000" },
     });
-    await prisma.productAttribute.deleteMany();
+    await prisma.productAttribute.deleteMany({
+      where: { product: { name: "Schema Test Product" } },
+    });
     await prisma.product.deleteMany({ where: { name: "Schema Test Product" } });
     await prisma.financialPolicy.deleteMany();
     await prisma.userPreference.deleteMany();

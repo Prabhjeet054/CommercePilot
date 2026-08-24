@@ -23,8 +23,10 @@ model User {
   role         String
   name         String?
   phone        String?
+  merchantId   String?  @unique @map("merchant_id") @db.Uuid
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
 
+  merchant        Merchant?        @relation(fields: [merchantId], references: [id], onDelete: SetNull)
   preference      UserPreference?
   financialPolicy FinancialPolicy?
   purchaseIntents PurchaseIntent[]
@@ -73,6 +75,7 @@ model Merchant {
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   products Product[]
+  admin    User?
 
   @@map("merchants")
 }

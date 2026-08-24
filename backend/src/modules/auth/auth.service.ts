@@ -16,6 +16,7 @@ export type PublicUser = {
   email: string;
   role: string;
   name: string | null;
+  merchantId: string | null;
 };
 
 export type AccessTokenPayload = {
@@ -126,8 +127,15 @@ export function toPublicUser(user: {
   email: string;
   role: string;
   name: string | null;
+  merchantId: string | null;
 }): PublicUser {
-  return { id: user.id, email: user.email, role: user.role, name: user.name };
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    name: user.name,
+    merchantId: user.merchantId,
+  };
 }
 
 export async function registerUser(
