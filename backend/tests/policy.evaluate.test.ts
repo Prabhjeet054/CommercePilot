@@ -221,6 +221,44 @@ describe("evaluatePolicy — fail-closed inputs", () => {
     );
   });
 
+  it("rejects empty, whitespace, and non-string categories (does not throw, never ALLOW)", () => {
+    const open = policy({ allowedCategories: [], blockedCategories: [] });
+    expect(evaluatePolicy(open, proposal({ category: "" }), 0, 0)).toEqual({
+      decision: "DENY",
+      reasonCode: REASON.INVALID_CATEGORY,
+    });
+    expect(evaluatePolicy(open, proposal({ category: "   " }), 0, 0)).toEqual({
+      decision: "DENY",
+      reasonCode: REASON.INVALID_CATEGORY,
+    });
+    expect(
+      evaluatePolicy(open, proposal({ category: null as unknown as string }), 0, 0),
+    ).toEqual({
+      decision: "DENY",
+      reasonCode: REASON.INVALID_CATEGORY,
+    });
+    expect(
+      evaluatePolicy(open, proposal({ category: 123 as unknown as string }), 0, 0),
+    ).toEqual({
+      decision: "DENY",
+      reasonCode: REASON.INVALID_CATEGORY,
+    });
+  });
+
+  it("rejects a missing merchantId without throwing (never ALLOW)", () => {
+    const open = policy({ allowedCategories: [], trustedMerchants: [] });
+    expect(evaluatePolicy(open, proposal({ merchantId: "" }), 0, 0)).toEqual({
+      decision: "DENY",
+      reasonCode: REASON.INVALID_MERCHANT,
+    });
+    expect(
+      evaluatePolicy(open, proposal({ merchantId: undefined as unknown as string }), 0, 0),
+    ).toEqual({
+      decision: "DENY",
+      reasonCode: REASON.INVALID_MERCHANT,
+    });
+  });
+
   it("treats a non-finite todaySpend as fail-closed REQUIRE_APPROVAL (daily limit), not ALLOW", () => {
     expect(evaluatePolicy(policy(), proposal({ amount: 1 }), Number.NaN, 0)).toEqual({
       decision: "REQUIRE_APPROVAL",

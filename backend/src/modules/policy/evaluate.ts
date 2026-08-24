@@ -36,6 +36,8 @@ export type PolicyResult = {
 
 export const REASON = {
   INVALID_AMOUNT: "INVALID_AMOUNT",
+  INVALID_CATEGORY: "INVALID_CATEGORY",
+  INVALID_MERCHANT: "INVALID_MERCHANT",
   AUTONOMOUS_DISABLED: "AUTONOMOUS_DISABLED",
   CATEGORY_BLOCKED: "CATEGORY_BLOCKED",
   CATEGORY_NOT_ALLOWED: "CATEGORY_NOT_ALLOWED",
@@ -52,16 +54,24 @@ function rupees(value: { toString(): string } | number | string): number {
   return Number(Number(value.toString()).toFixed(2));
 }
 
-function normalizeCategory(value: string): string {
+function normalizeCategory(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
   return value.trim().toLowerCase();
 }
 
 function categorySet(values: string[]): Set<string> {
-  return new Set(values.map(normalizeCategory));
+  return new Set(values.map(normalizeCategory).filter((value) => value.length > 0));
 }
 
 function merchantSet(values: string[]): Set<string> {
-  return new Set(values.map((id) => id.trim().toLowerCase()));
+  return new Set(
+    values
+      .filter((id): id is string => typeof id === "string")
+      .map((id) => id.trim().toLowerCase())
+      .filter((id) => id.length > 0),
+  );
 }
 
 function finiteOrInfinity(value: number): number {
@@ -78,11 +88,20 @@ export function evaluatePolicy(
     return { decision: "DENY", reasonCode: REASON.INVALID_AMOUNT };
   }
 
+  const category = normalizeCategory(proposal.category);
+  if (category.length === 0) {
+    return { decision: "DENY", reasonCode: REASON.INVALID_CATEGORY };
+  }
+
+  const merchantId =
+    typeof proposal.merchantId === "string" ? proposal.merchantId.trim().toLowerCase() : "";
+  if (merchantId.length === 0) {
+    return { decision: "DENY", reasonCode: REASON.INVALID_MERCHANT };
+  }
+
   const amount = rupees(proposal.amount);
   const spend = finiteOrInfinity(todaySpend);
   const autonomousCount = finiteOrInfinity(todayAutonomousCount);
-  const category = normalizeCategory(proposal.category);
-  const merchantId = proposal.merchantId.trim().toLowerCase();
 
   // 1. Autonomous purchasing disabled — soft gate, even for a tiny amount.
   if (!policy.autonomousEnabled) {
