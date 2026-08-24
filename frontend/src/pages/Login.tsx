@@ -32,8 +32,8 @@ export default function LoginPage() {
 
     setServerError(null);
     try {
-      await login(parsed.data.email, parsed.data.password);
-      navigate("/", { replace: true });
+      const signedIn = await login(parsed.data.email, parsed.data.password);
+      navigate(signedIn.role === "merchant_admin" ? "/products" : "/policy", { replace: true });
     } catch (error) {
       setServerError(error instanceof Error ? error.message : "Invalid credentials");
     }

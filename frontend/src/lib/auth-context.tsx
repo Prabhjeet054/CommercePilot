@@ -22,13 +22,13 @@ type AuthContextValue = {
   accessToken: string | null;
   user: AuthUser | null;
   isReady: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthUser>;
   register: (input: {
     email: string;
     password: string;
     name: string;
     role: "customer" | "merchant_admin";
-  }) => Promise<void>;
+  }) => Promise<AuthUser>;
   logout: () => Promise<void>;
   authFetch: (path: string, init?: RequestInit) => Promise<Response>;
 };
@@ -98,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const body = (await response.json()) as { accessToken: string; user: AuthUser };
       setAccessToken(body.accessToken);
       setUser(body.user);
+      return body.user;
     },
     [],
   );
@@ -121,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const body = (await response.json()) as { accessToken: string; user: AuthUser };
       setAccessToken(body.accessToken);
       setUser(body.user);
+      return body.user;
     },
     [],
   );

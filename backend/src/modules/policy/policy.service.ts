@@ -27,6 +27,32 @@ export type PolicySnapshot = {
   updatedAt: string | null;
 };
 
+export type PolicyDto = {
+  id: string;
+  userId: string;
+  maxAutonomousAmount: string;
+  dailySpendingLimit: string;
+  approvalThreshold: string;
+  allowedCategories: string[];
+  blockedCategories: string[];
+  trustedMerchants: string[];
+  autonomousEnabled: boolean;
+  maxAutonomousTxnsPerDay: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PolicyWriteInput = {
+  maxAutonomousAmount: number;
+  dailySpendingLimit: number;
+  approvalThreshold: number;
+  allowedCategories: string[];
+  blockedCategories: string[];
+  trustedMerchants: string[];
+  autonomousEnabled: boolean;
+  maxAutonomousTxnsPerDay: number;
+};
+
 export type EvaluateAndPersistInput = {
   userId: string;
   purchaseIntentId: string;
@@ -145,4 +171,55 @@ export async function evaluateAndPersist(
     todayAutonomousCount,
     policySnapshot,
   };
+}
+
+export function serializePolicy(policy: FinancialPolicy): PolicyDto {
+  return {
+    id: policy.id,
+    userId: policy.userId,
+    maxAutonomousAmount: policy.maxAutonomousAmount.toFixed(2),
+    dailySpendingLimit: policy.dailySpendingLimit.toFixed(2),
+    approvalThreshold: policy.approvalThreshold.toFixed(2),
+    allowedCategories: [...policy.allowedCategories],
+    blockedCategories: [...policy.blockedCategories],
+    trustedMerchants: [...policy.trustedMerchants],
+    autonomousEnabled: policy.autonomousEnabled,
+    maxAutonomousTxnsPerDay: policy.maxAutonomousTxnsPerDay,
+    createdAt: policy.createdAt.toISOString(),
+    updatedAt: policy.updatedAt.toISOString(),
+  };
+}
+
+export async function getPolicyForUser(userId: string): Promise<FinancialPolicy | null> {
+  return prisma.financialPolicy.findUnique({ where: { userId } });
+}
+
+export async function upsertPolicyForUser(
+  userId: string,
+  input: PolicyWriteInput,
+): Promise<{ policy: FinancialPolicy; created: boolean }> {
+  const data = {
+    maxAutonomousAmount: new Prisma.Decimal(input.maxAutonomousAmount.toFixed(2)),
+    dailySpendingLimit: new Prisma.Decimal(input.dailySpendingLimit.toFixed(2)),
+    approvalThreshold: new Prisma.Decimal(input.approvalThreshold.toFixed(2)),
+    allowedCategories: input.allowedCategories,
+    blockedCategories: input.blockedCategories,
+    trustedMerchants: input.trustedMerchants,
+    autonomousEnabled: input.autonomousEnabled,
+    maxAutonomousTxnsPerDay: input.maxAutonomousTxnsPerDay,
+  };
+
+  const existing = await prisma.financialPolicy.findUnique({ where: { userId } });
+  if (existing) {
+    const policy = await prisma.financialPolicy.update({
+      where: { userId },
+      data,
+    });
+    return { policy, created: false };
+  }
+
+  const policy = await prisma.financialPolicy.create({
+    data: { userId, ...data },
+  });
+  return { policy, created: true };
 }

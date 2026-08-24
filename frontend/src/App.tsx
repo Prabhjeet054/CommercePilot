@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth-context";
 import LoginPage from "@/pages/Login";
+import PolicySettingsPage from "@/pages/PolicySettings";
 import ProductManagementPage from "@/pages/ProductManagement";
 import RegisterPage from "@/pages/Register";
 
@@ -31,6 +32,11 @@ function LandingPage() {
               {user.role === "merchant_admin" && (
                 <Button asChild variant="outline" size="sm">
                   <Link to="/products">Catalog</Link>
+                </Button>
+              )}
+              {user.role === "customer" && (
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/policy">Policy</Link>
                 </Button>
               )}
               <span className="font-mono text-xs text-foreground">{user.email}</span>
@@ -103,6 +109,14 @@ export default function App() {
         element={
           <ProtectedRoute roles={["merchant_admin"]}>
             <ProductManagementPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/policy"
+        element={
+          <ProtectedRoute roles={["customer"]}>
+            <PolicySettingsPage />
           </ProtectedRoute>
         }
       />
