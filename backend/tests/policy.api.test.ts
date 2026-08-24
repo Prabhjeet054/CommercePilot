@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
-import { REASON } from "../src/modules/policy/evaluate";
+import { evaluatePolicy, REASON } from "../src/modules/policy/evaluate";
 
 const JWT_SECRET = "policy-api-access-secret";
 const JWT_REFRESH_SECRET = "policy-api-refresh-secret";
@@ -65,6 +65,7 @@ describe("policy API", () => {
     const response = await request(app).get("/policies/me").set(authHeader(customer.token));
 
     expect(response.status).toBe(404);
+    expect(response.status).not.toBe(500);
     expect(response.body.error).toBe(REASON.NO_POLICY_CONFIGURED);
     expect(response.body.message).toMatch(/set up your policy/i);
   });
@@ -87,8 +88,18 @@ describe("policy API", () => {
 
     const fetched = await request(app).get("/policies/me").set(authHeader(customer.token));
     expect(fetched.status).toBe(200);
-    expect(fetched.body.id).toBe(created.body.id);
-    expect(fetched.body.maxAutonomousAmount).toBe("5000.00");
+    expect(fetched.body).toMatchObject({
+      id: created.body.id,
+      userId: customer.user.id,
+      maxAutonomousAmount: "5000.00",
+      dailySpendingLimit: "10000.00",
+      approvalThreshold: "5000.00",
+      allowedCategories: ["Electronics", "Sports", "Travel"],
+      blockedCategories: [],
+      trustedMerchants: [],
+      autonomousEnabled: true,
+      maxAutonomousTxnsPerDay: 3,
+    });
   });
 
   it("upserts on re-save instead of creating a second row", async () => {
@@ -127,9 +138,14 @@ describe("policy API", () => {
     const strangerGet = await request(app).get("/policies/me").set(authHeader(stranger.token));
     expect(strangerGet.status).toBe(404);
 
-    const ownerGet = await request(app).get("/policies/me").set(authHeader(owner.token));
-    expect(ownerGet.status).toBe(200);
-    expect(ownerGet.body.userId).toBe(owner.user.id);
+    const ownerRow = await prisma.financialPolicy.findUnique({
+      where: { userId: owner.user.id },
+    });
+    const strangerRow = await prisma.financialPolicy.findUnique({
+      where: { userId: stranger.user.id },
+    });
+    expect(ownerRow).not.toBeNull();
+    expect(strangerRow).toBeNull();
   });
 
   it("rejects merchant_admin writes with 403 and unauthenticated calls with 401", async () => {
@@ -148,6 +164,17 @@ describe("policy API", () => {
       .set(authHeader(customer.token))
       .send({ ...DEMO_POLICY, approvalThreshold: -1 });
     expect(negative.status).toBe(400);
+    const negativeDaily = await request(app)
+      .post("/policies")
+      .set(authHeader(customer.token))
+      .send({ ...DEMO_POLICY, dailySpendingLimit: -10 });
+    expect(negativeDaily.status).toBe(400);
+
+    const negativeAuto = await request(app)
+      .post("/policies")
+      .set(authHeader(customer.token))
+      .send({ ...DEMO_POLICY, maxAutonomousAmount: -0.01 });
+    expect(negativeAuto.status).toBe(400);
 
     const inverted = await request(app)
       .post("/policies")
@@ -162,5 +189,37 @@ describe("policy API", () => {
     expect(inverted.body.approvalThreshold).toBe("1000.00");
     expect(inverted.body.maxAutonomousAmount).toBe("9000.00");
     expect(inverted.body.dailySpendingLimit).toBe("500.00");
+  });
+
+  it("feeds an API-created demo policy into evaluatePolicy and matches PRD Section 33 decisions", async () => {
+    const customer = await registerUser("customer");
+    const created = await request(app)
+      .post("/policies")
+      .set(authHeader(customer.token))
+      .send(DEMO_POLICY);
+    expect(created.status).toBe(201);
+
+    const stored = await prisma.financialPolicy.findUniqueOrThrow({
+      where: { userId: customer.user.id },
+    });
+
+    const merchantId = randomUUID();
+    const shoe = evaluatePolicy(
+      stored,
+      { amount: 4499, category: "Sports", merchantId },
+      0,
+      0,
+    );
+    const laptop = evaluatePolicy(
+      stored,
+      { amount: 120_000, category: "Electronics", merchantId },
+      0,
+      0,
+    );
+
+    expect(shoe).toEqual({ decision: "ALLOW", reasonCode: REASON.WITHIN_POLICY });
+    expect(laptop.decision).toBe("REQUIRE_APPROVAL");
+    expect(laptop.decision).not.toBe("ALLOW");
+    expect(laptop.reasonCode).toBe(REASON.DAILY_LIMIT_EXCEEDED);
   });
 });

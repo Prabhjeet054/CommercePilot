@@ -29,7 +29,9 @@ export async function upsert(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const parsed = policyWriteSchema.safeParse(req.body);
+  const raw = req.body && typeof req.body === "object" ? req.body : {};
+  const { userId: _ignoredUserId, ...payload } = raw as Record<string, unknown>;
+  const parsed = policyWriteSchema.safeParse(payload);
   if (!parsed.success) {
     res.status(400).json({ error: "VALIDATION_ERROR", fields: fieldErrors(parsed.error) });
     return;

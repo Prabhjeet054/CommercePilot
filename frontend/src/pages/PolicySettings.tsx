@@ -186,29 +186,50 @@ export default function PolicySettingsPage() {
           </label>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <label className="block space-y-2">
+            <label className="block space-y-2" htmlFor="policy-max-autonomous">
               <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
                 Max autonomous (₹)
               </span>
-              <input type="number" step="0.01" min="0" className={inputClass} {...register("maxAutonomousAmount")} />
+              <input
+                id="policy-max-autonomous"
+                type="number"
+                step="0.01"
+                min="0"
+                className={inputClass}
+                {...register("maxAutonomousAmount")}
+              />
               {errors.maxAutonomousAmount && (
                 <p className="text-sm text-destructive">{errors.maxAutonomousAmount.message}</p>
               )}
             </label>
-            <label className="block space-y-2">
+            <label className="block space-y-2" htmlFor="policy-daily-limit">
               <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
                 Daily limit (₹)
               </span>
-              <input type="number" step="0.01" min="0" className={inputClass} {...register("dailySpendingLimit")} />
+              <input
+                id="policy-daily-limit"
+                type="number"
+                step="0.01"
+                min="0"
+                className={inputClass}
+                {...register("dailySpendingLimit")}
+              />
               {errors.dailySpendingLimit && (
                 <p className="text-sm text-destructive">{errors.dailySpendingLimit.message}</p>
               )}
             </label>
-            <label className="block space-y-2">
+            <label className="block space-y-2" htmlFor="policy-approval-threshold">
               <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
                 Approval threshold (₹)
               </span>
-              <input type="number" step="0.01" min="0" className={inputClass} {...register("approvalThreshold")} />
+              <input
+                id="policy-approval-threshold"
+                type="number"
+                step="0.01"
+                min="0"
+                className={inputClass}
+                {...register("approvalThreshold")}
+              />
               {errors.approvalThreshold && (
                 <p className="text-sm text-destructive">{errors.approvalThreshold.message}</p>
               )}
