@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app";
 
-const app = createApp({ FRONTEND_URL: "http://localhost:5173" });
+const TEST_JWT = "health-test-access-secret";
+const TEST_REFRESH = "health-test-refresh-secret";
+
+const app = createApp({
+  FRONTEND_URL: "http://localhost:5173",
+  JWT_SECRET: TEST_JWT,
+  JWT_REFRESH_SECRET: TEST_REFRESH,
+  NODE_ENV: "test",
+});
 
 describe("GET /health", () => {
   it("returns 200 with status ok and an ISO timestamp", async () => {

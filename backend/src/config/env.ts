@@ -30,6 +30,13 @@ const envSchema = z.object({
   FRONTEND_URL: z
     .string({ required_error: "FRONTEND_URL is required" })
     .url("FRONTEND_URL must be a valid URL"),
+  JWT_SECRET: z
+    .string({ required_error: "JWT_SECRET is required" })
+    .min(16, "JWT_SECRET must be at least 16 characters"),
+  JWT_REFRESH_SECRET: z
+    .string({ required_error: "JWT_REFRESH_SECRET is required" })
+    .min(16, "JWT_REFRESH_SECRET must be at least 16 characters"),
+  COOKIE_SECURE: z.enum(["true", "false"]).optional(),
   LLM_PROVIDER: z.string().optional(),
   LLM_PROVIDER_API_KEY: z.string().optional(),
 });

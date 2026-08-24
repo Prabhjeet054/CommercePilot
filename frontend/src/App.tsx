@@ -1,7 +1,12 @@
-import { Route, Routes } from "react-router-dom";
+import { Link, Route, Routes } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth-context";
+import LoginPage from "@/pages/Login";
+import RegisterPage from "@/pages/Register";
 
 function LandingPage() {
+  const { user, isReady, logout } = useAuth();
+
   return (
     <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
       <div
@@ -17,7 +22,26 @@ function LandingPage() {
         <span className="font-mono text-xs tracking-[0.28em] text-muted-foreground">
           CP-CONSOLE
         </span>
-        <span className="font-mono text-xs text-muted-foreground">INR · TEST MODE</span>
+        <div className="flex items-center gap-4">
+          <span className="font-mono text-xs text-muted-foreground">INR · TEST MODE</span>
+          {isReady && user ? (
+            <>
+              <span className="font-mono text-xs text-foreground">{user.email}</span>
+              <Button type="button" variant="outline" size="sm" onClick={() => void logout()}>
+                Sign out
+              </Button>
+            </>
+          ) : (
+            <div className="flex gap-3">
+              <Button asChild variant="outline" size="sm">
+                <Link to="/login">Sign in</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link to="/register">Register</Link>
+              </Button>
+            </div>
+          )}
+        </div>
       </header>
 
       <section className="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-10 px-8 pb-24">
@@ -65,6 +89,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
     </Routes>
   );
 }

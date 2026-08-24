@@ -41,10 +41,13 @@ describe("loadEnv", () => {
       PORT: "3000",
       DATABASE_URL: "postgresql://commercepilot:commercepilot@localhost:5432/commercepilot",
       FRONTEND_URL: "http://localhost:5173",
+      JWT_SECRET: "phase3-dev-access-secret-change-me",
+      JWT_REFRESH_SECRET: "phase3-dev-refresh-secret-change-me",
     });
 
     expect(env.PORT).toBe(3000);
     expect(env.FRONTEND_URL).toBe("http://localhost:5173");
     expect(env.DATABASE_URL).toContain("postgresql://");
+    expect(env.JWT_SECRET).toHaveLength(env.JWT_SECRET.length);
   });
 });

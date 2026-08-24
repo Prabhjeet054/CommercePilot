@@ -27,6 +27,9 @@ services:
       PORT: "3000"
       DATABASE_URL: postgresql://commercepilot:commercepilot@postgres:5432/commercepilot
       FRONTEND_URL: http://localhost:5173
+      JWT_SECRET: phase3-dev-access-secret-change-me
+      JWT_REFRESH_SECRET: phase3-dev-refresh-secret-change-me
+      COOKIE_SECURE: "false"
       LLM_PROVIDER: openai
       LLM_PROVIDER_API_KEY: replace-me
     depends_on:
@@ -36,6 +39,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:3000
     container_name: commercepilot-frontend
     ports:
       - "5173:80"
