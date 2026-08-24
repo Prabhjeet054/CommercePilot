@@ -61,7 +61,9 @@ describe("Prisma schema constraints", () => {
     await prisma.payment.deleteMany({ where: { razorpayPaymentId: { startsWith: "pay_schema_test_" } } });
     await prisma.order.deleteMany({ where: { razorpayOrderId: { startsWith: "order_schema_test_" } } });
     await prisma.approval.deleteMany();
-    await prisma.policyEvaluation.deleteMany();
+    await prisma.policyEvaluation.deleteMany({
+      where: { purchaseIntent: { rawText: "buy running shoes under 5000" } },
+    });
     await prisma.agentDecision.deleteMany();
     await prisma.agentRun.deleteMany();
     await prisma.auditLog.deleteMany();
@@ -72,7 +74,9 @@ describe("Prisma schema constraints", () => {
       where: { product: { name: "Schema Test Product" } },
     });
     await prisma.product.deleteMany({ where: { name: "Schema Test Product" } });
-    await prisma.financialPolicy.deleteMany();
+    await prisma.financialPolicy.deleteMany({
+      where: { user: { email: { startsWith: "schema-test-" } } },
+    });
     await prisma.userPreference.deleteMany();
     await prisma.notification.deleteMany();
     await prisma.user.deleteMany({ where: { email: { startsWith: "schema-test-" } } });
