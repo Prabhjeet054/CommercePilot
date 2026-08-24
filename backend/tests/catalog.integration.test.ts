@@ -137,9 +137,30 @@ describe("catalog seed and API", () => {
     );
     expect(ids).toContain(DEMO_SHOE_PRODUCT_ID);
     expect(ids).not.toContain(DEMO_LAPTOP_PRODUCT_ID);
+    expect(ids).not.toContain(seedUuid("product:apex-trail-grit"));
+    expect(ids).not.toContain(seedUuid("product:apex-carbon-plate-elite"));
     for (const product of response.body.products as Array<{ price: string; category: string }>) {
       expect(Number(product.price)).toBeLessThanOrEqual(5000);
       expect(product.category.toLowerCase()).toBe("sports");
+    }
+  });
+
+  it("excludes the ₹1,20,000 laptop when category=Electronics and maxPrice=90000", async () => {
+    const customer = await registerUser("customer");
+    const response = await request(app)
+      .get("/products")
+      .query({ category: "Electronics", maxPrice: "90000" })
+      .set(authHeader(customer.token));
+
+    expect(response.status).toBe(200);
+    const ids = (response.body.products as Array<{ id: string; price: string }>).map(
+      (product) => product.id,
+    );
+    expect(ids).not.toContain(DEMO_LAPTOP_PRODUCT_ID);
+    expect(ids).toContain(seedUuid("product:nova-budget-laptop"));
+    for (const product of response.body.products as Array<{ price: string; category: string }>) {
+      expect(Number(product.price)).toBeLessThanOrEqual(90000);
+      expect(product.category.toLowerCase()).toBe("electronics");
     }
   });
 
@@ -281,6 +302,8 @@ describe("catalog seed and API", () => {
       .send({ name: "catalog-test-stolen", category: "Sports", price: 500, stock: 2 });
     expect(foreign.status).toBe(404);
     expect(foreign.body).toEqual({ error: "NOT_FOUND" });
+    expect(Object.keys(foreign.body)).toEqual(["error"]);
+    expect(JSON.stringify(foreign.body)).not.toMatch(/catalog-test-owned-by-a|price|stock|merchantId/i);
     expect(foreign.status).not.toBe(403);
   });
 
