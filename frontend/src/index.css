@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Deep navy / near-black console — not shadcn zinc/slate defaults */
+    --background: 225 42% 4%;
+    --foreground: 210 20% 96%;
+    --card: 222 36% 7%;
+    --card-foreground: 210 20% 96%;
+    --popover: 222 36% 7%;
+    --popover-foreground: 210 20% 96%;
+    /* Gold reserved for money-moving actions (Pay Now, Approve) */
+    --primary: 43 96% 56%;
+    --primary-foreground: 225 42% 6%;
+    --secondary: 220 24% 12%;
+    --secondary-foreground: 210 16% 88%;
+    --muted: 220 22% 10%;
+    --muted-foreground: 215 12% 62%;
+    --accent: 220 24% 14%;
+    --accent-foreground: 210 20% 96%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 217 18% 16%;
+    --input: 217 18% 16%;
+    --ring: 43 96% 56%;
+    --radius: 0.375rem;
+    --status-completed: 160 72% 39%;
+    --status-denied: 0 72% 51%;
+    --status-pending: 38 92% 50%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    @apply min-h-full bg-background text-foreground antialiased;
+  }
+
+  body {
+    @apply font-sans;
+  }
+}

@@ -1,0 +1,32 @@
+import { describe, expect, it } from "vitest";
+import request from "supertest";
+import { createApp } from "../src/app";
+
+const app = createApp({ FRONTEND_URL: "http://localhost:5173" });
+
+describe("GET /health", () => {
+  it("returns 200 with status ok and an ISO timestamp", async () => {
+    const response = await request(app).get("/health");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      status: "ok",
+      timestamp: expect.any(String),
+    });
+    expect(Number.isNaN(Date.parse(response.body.timestamp))).toBe(false);
+  });
+
+  it("allows CORS from FRONTEND_URL and rejects other origins", async () => {
+    const allowed = await request(app)
+      .get("/health")
+      .set("Origin", "http://localhost:5173");
+    expect(allowed.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:5173",
+    );
+
+    const blocked = await request(app)
+      .get("/health")
+      .set("Origin", "http://evil.example");
+    expect(blocked.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+});

@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: commercepilot-postgres
+    environment:
+      POSTGRES_USER: commercepilot
+      POSTGRES_PASSWORD: commercepilot
+      POSTGRES_DB: commercepilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U commercepilot -d commercepilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: commercepilot-backend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgresql://commercepilot:commercepilot@postgres:5432/commercepilot
+      FRONTEND_URL: http://localhost:5173
+      LLM_PROVIDER: openai
+      LLM_PROVIDER_API_KEY: replace-me
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: commercepilot-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

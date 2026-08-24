@@ -1,0 +1,22 @@
+# Secrets — never commit real env files
+.env
+.env.local
+.env.*.local
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Logs and OS
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Tooling
+.vscode/
+.idea/
+*.swp
