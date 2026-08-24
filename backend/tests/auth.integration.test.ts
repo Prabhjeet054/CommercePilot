@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import jwt from "jsonwebtoken";
 import request from "supertest";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
 import { INVALID_CREDENTIALS, signAccessToken } from "../src/modules/auth/auth.service";
@@ -27,6 +27,10 @@ function clientIp(): string {
 function authHeader(token: string) {
   return { Authorization: `Bearer ${token}` };
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 afterAll(async () => {
   await prisma.user.deleteMany({ where: { email: { startsWith: "auth-test-" } } });
@@ -74,9 +78,17 @@ describe("auth integration", () => {
       .send({ email, password, name: "Arjun", role: "merchant_admin" });
     expect(registered.status).toBe(201);
 
+    const login = await request(app)
+      .post("/auth/login")
+      .set("X-Forwarded-For", clientIp())
+      .send({ email, password });
+    expect(login.status).toBe(200);
+    expect(login.body.user.role).toBe("merchant_admin");
+    expect(JSON.stringify(login.body)).not.toMatch(/password/i);
+
     const admin = await request(app)
       .get("/auth/admin-check")
-      .set(authHeader(registered.body.accessToken as string));
+      .set(authHeader(login.body.accessToken as string));
     expect(admin.status).toBe(200);
     expect(admin.body).toEqual({ ok: true });
   });
@@ -292,7 +304,73 @@ describe("auth integration", () => {
     const payload = jwt.decode(registered.body.accessToken as string) as jwt.JwtPayload;
     expect(payload.sub).toBe(registered.body.user.id);
     expect(payload.role).toBe("customer");
+    expect(Object.keys(payload).sort()).toEqual(["exp", "iat", "role", "sub", "typ"].sort());
     expect(JSON.stringify(payload)).not.toContain(email);
     expect(JSON.stringify(payload)).not.toMatch(/password/i);
+  });
+
+  it("rejects a tampered access token at requireAuth", async () => {
+    const registered = await request(app)
+      .post("/auth/register")
+      .set("X-Forwarded-For", clientIp())
+      .send({
+        email: uniqueEmail(),
+        password: "password12",
+        name: "Tamper",
+        role: "customer",
+      });
+
+    const token = registered.body.accessToken as string;
+    const [header, payload, signature] = token.split(".");
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString()) as {
+      role: string;
+    };
+    decoded.role = "merchant_admin";
+    const tampered = `${header}.${Buffer.from(JSON.stringify(decoded)).toString("base64url")}.${signature}`;
+
+    const me = await request(app).get("/auth/me").set(authHeader(tampered));
+    expect(me.status).toBe(401);
+    expect(me.body).toEqual({ error: "UNAUTHORIZED" });
+  });
+
+  it("never echoes plaintext passwords or hashes in bodies or logs", async () => {
+    const logs: string[] = [];
+    const capture = (...args: unknown[]) => {
+      logs.push(args.map((value) => String(value)).join(" "));
+    };
+    vi.spyOn(console, "log").mockImplementation(capture);
+    vi.spyOn(console, "error").mockImplementation(capture);
+    vi.spyOn(console, "info").mockImplementation(capture);
+    vi.spyOn(console, "warn").mockImplementation(capture);
+
+    const secretPassword = "plaintext-secret-99";
+    const registered = await request(app)
+      .post("/auth/register")
+      .set("X-Forwarded-For", clientIp())
+      .send({
+        email: uniqueEmail(),
+        password: secretPassword,
+        name: "NoLeak",
+        role: "customer",
+      });
+
+    expect(registered.status).toBe(201);
+    const bodies = [
+      JSON.stringify(registered.body),
+      JSON.stringify(
+        (
+          await request(app)
+            .get("/auth/me")
+            .set(authHeader(registered.body.accessToken as string))
+        ).body,
+      ),
+    ];
+
+    for (const body of bodies) {
+      expect(body).not.toContain(secretPassword);
+      expect(body).not.toMatch(/passwordHash|password_hash|\$2[aby]\$/);
+    }
+    expect(logs.join("\n")).not.toContain(secretPassword);
+    expect(logs.join("\n")).not.toMatch(/\$2[aby]\$/);
   });
 });
