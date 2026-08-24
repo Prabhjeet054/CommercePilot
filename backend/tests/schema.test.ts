@@ -280,4 +280,60 @@ describe("Prisma schema constraints", () => {
       }),
     ).rejects.toThrow(/purchase_intents_status_check|check constraint/i);
   });
+
+  it("rejects NULL in a required column (users.password_hash)", async () => {
+    const id = randomUUID();
+    const email = uniqueEmail();
+
+    await expect(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO users (id, email, password_hash, role) VALUES ('${id}'::uuid, '${email}', NULL, 'customer')`,
+      ),
+    ).rejects.toThrow(/23502|Failing row contains|Raw query failed/i);
+  });
+
+  it("has the required indexes on products, agent_decisions, and audit_logs", async () => {
+    const rows = await prisma.$queryRaw<Array<{ indexname: string }>>`
+      SELECT indexname
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND indexname IN (
+          'products_category_idx',
+          'products_merchant_id_idx',
+          'agent_decisions_agent_run_id_idx',
+          'audit_logs_purchase_intent_id_idx',
+          'audit_logs_correlation_id_idx'
+        )
+    `;
+
+    expect(rows.map((row) => row.indexname).sort()).toEqual([
+      "agent_decisions_agent_run_id_idx",
+      "audit_logs_correlation_id_idx",
+      "audit_logs_purchase_intent_id_idx",
+      "products_category_idx",
+      "products_merchant_id_idx",
+    ]);
+  });
+
+  it("stores monetary columns as numeric, never float/double/real", async () => {
+    const rows = await prisma.$queryRaw<
+      Array<{ table_name: string; column_name: string; data_type: string; numeric_scale: number }>
+    >`
+      SELECT table_name, column_name, data_type, numeric_scale
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND column_name IN (
+          'price', 'amount', 'max_autonomous_amount',
+          'daily_spending_limit', 'approval_threshold'
+        )
+      ORDER BY table_name, column_name
+    `;
+
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.data_type).toBe("numeric");
+      expect(row.numeric_scale).toBe(2);
+      expect(["double precision", "real", "money"]).not.toContain(row.data_type);
+    }
+  });
 });
