@@ -1,3 +1,12 @@
+// CommercePilot Prisma schema
+//
+// Money: all monetary columns are Decimal(12, 2) in rupees (INR), never Float
+// and never paise. Conversion to paise happens at exactly one boundary later
+// (Phase 15, Razorpay client) per PRD Section 37.
+//
+// Status/state columns are String + Postgres CHECK constraints (not native
+// enums), matching PRD Section 24's preference for simpler hackathon migrations.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -5,4 +14,278 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         String
+  name         String?
+  phone        String?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  preference      UserPreference?
+  financialPolicy FinancialPolicy?
+  purchaseIntents PurchaseIntent[]
+  approvals       Approval[]
+  notifications   Notification[]
+
+  @@map("users")
+}
+
+model UserPreference {
+  id                  String   @id @default(uuid()) @db.Uuid
+  userId              String   @unique @map("user_id") @db.Uuid
+  preferredCategories String[] @default([]) @map("preferred_categories")
+  stylePreferences    Json?    @map("style_preferences") @db.JsonB
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model FinancialPolicy {
+  id                      String    @id @default(uuid()) @db.Uuid
+  userId                  String    @unique @map("user_id") @db.Uuid
+  maxAutonomousAmount     Decimal   @map("max_autonomous_amount") @db.Decimal(12, 2)
+  dailySpendingLimit      Decimal   @map("daily_spending_limit") @db.Decimal(12, 2)
+  approvalThreshold       Decimal   @map("approval_threshold") @db.Decimal(12, 2)
+  allowedCategories       String[]  @default([]) @map("allowed_categories")
+  blockedCategories       String[]  @default([]) @map("blocked_categories")
+  trustedMerchants        String[]  @default([]) @map("trusted_merchants") @db.Uuid
+  autonomousEnabled       Boolean   @default(false) @map("autonomous_enabled")
+  maxAutonomousTxnsPerDay Int       @default(3) @map("max_autonomous_txns_per_day")
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("financial_policies")
+}
+
+model Merchant {
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String
+  trustScore       Decimal  @default(50) @map("trust_score") @db.Decimal(4, 2)
+  isTrustedDefault Boolean  @default(false) @map("is_trusted_default")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  products Product[]
+
+  @@map("merchants")
+}
+
+model Product {
+  id           String   @id @default(uuid()) @db.Uuid
+  merchantId   String   @map("merchant_id") @db.Uuid
+  name         String
+  category     String
+  description  String?
+  price        Decimal  @db.Decimal(12, 2)
+  currency     String   @default("INR")
+  rating       Decimal? @db.Decimal(3, 2)
+  reviewCount  Int      @default(0) @map("review_count")
+  stock        Int      @default(0)
+  imageUrl     String?  @map("image_url")
+  tags         String[] @default([])
+  deliveryDays Int?     @map("delivery_days")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  merchant     Merchant          @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  attributes   ProductAttribute[]
+  decisions    AgentDecision[]
+  approvals    Approval[]
+  orders       Order[]
+
+  @@index([category])
+  @@index([merchantId])
+  @@map("products")
+}
+
+model ProductAttribute {
+  id        String  @id @default(uuid()) @db.Uuid
+  productId String  @map("product_id") @db.Uuid
+  attrKey   String  @map("attr_key")
+  attrValue String? @map("attr_value")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, attrKey])
+  @@map("product_attributes")
+}
+
+model PurchaseIntent {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  rawText          String   @map("raw_text")
+  structuredIntent Json     @map("structured_intent") @db.JsonB
+  purchaseMode     String   @map("purchase_mode")
+  status           String
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  agentRun          AgentRun?
+  policyEvaluations PolicyEvaluation[]
+  approval          Approval?
+  order             Order?
+  auditLogs         AuditLog[]
+
+  @@index([userId])
+  @@map("purchase_intents")
+}
+
+model AgentRun {
+  id               String    @id @default(uuid()) @db.Uuid
+  purchaseIntentId String    @unique @map("purchase_intent_id") @db.Uuid
+  startedAt        DateTime  @default(now()) @map("started_at") @db.Timestamptz
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz
+  status           String?
+
+  purchaseIntent PurchaseIntent @relation(fields: [purchaseIntentId], references: [id], onDelete: Cascade)
+  decisions      AgentDecision[]
+
+  @@map("agent_runs")
+}
+
+model AgentDecision {
+  id             String   @id @default(uuid()) @db.Uuid
+  agentRunId     String   @map("agent_run_id") @db.Uuid
+  productId      String   @map("product_id") @db.Uuid
+  score          Decimal? @db.Decimal(5, 2)
+  scoreBreakdown Json?    @map("score_breakdown") @db.JsonB
+  rank           Int?
+  selected       Boolean  @default(false)
+  rationale      String?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  agentRun AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([agentRunId])
+  @@index([productId])
+  @@map("agent_decisions")
+}
+
+model PolicyEvaluation {
+  id              String   @id @default(uuid()) @db.Uuid
+  purchaseIntentId String  @map("purchase_intent_id") @db.Uuid
+  decision        String
+  reasonCode      String   @map("reason_code")
+  policySnapshot  Json     @map("policy_snapshot") @db.JsonB
+  evaluatedAt     DateTime @default(now()) @map("evaluated_at") @db.Timestamptz
+
+  purchaseIntent PurchaseIntent @relation(fields: [purchaseIntentId], references: [id], onDelete: Cascade)
+  approvals      Approval[]
+
+  @@index([purchaseIntentId])
+  @@map("policy_evaluations")
+}
+
+model Approval {
+  id                 String    @id @default(uuid()) @db.Uuid
+  purchaseIntentId   String    @unique @map("purchase_intent_id") @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  productId          String    @map("product_id") @db.Uuid
+  amount             Decimal?  @db.Decimal(12, 2)
+  policyEvaluationId String?   @map("policy_evaluation_id") @db.Uuid
+  reasonCode         String?   @map("reason_code")
+  status             String    @default("PENDING")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt          DateTime? @map("expires_at") @db.Timestamptz
+  consumedAt         DateTime? @map("consumed_at") @db.Timestamptz
+
+  purchaseIntent   PurchaseIntent    @relation(fields: [purchaseIntentId], references: [id], onDelete: Restrict)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  policyEvaluation PolicyEvaluation? @relation(fields: [policyEvaluationId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([productId])
+  @@index([policyEvaluationId])
+  @@map("approvals")
+}
+
+model Order {
+  id               String   @id @default(uuid()) @db.Uuid
+  purchaseIntentId String   @unique @map("purchase_intent_id") @db.Uuid
+  productId        String   @map("product_id") @db.Uuid
+  razorpayOrderId  String?  @unique @map("razorpay_order_id")
+  amount           Decimal  @db.Decimal(12, 2)
+  currency         String   @default("INR")
+  state            String
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  purchaseIntent PurchaseIntent @relation(fields: [purchaseIntentId], references: [id], onDelete: Restrict)
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  payments       Payment[]
+  webhookEvents  WebhookEvent[]
+
+  @@index([productId])
+  @@map("orders")
+}
+
+model Payment {
+  id                String    @id @default(uuid()) @db.Uuid
+  orderId           String    @map("order_id") @db.Uuid
+  razorpayPaymentId String?   @unique @map("razorpay_payment_id")
+  razorpaySignature String?   @map("razorpay_signature")
+  status            String
+  signatureVerified Boolean   @default(false) @map("signature_verified")
+  verifiedAt        DateTime? @map("verified_at") @db.Timestamptz
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@map("payments")
+}
+
+model WebhookEvent {
+  id             String    @id @default(uuid()) @db.Uuid
+  eventId        String    @unique @map("event_id")
+  eventType      String    @map("event_type")
+  orderId        String?   @map("order_id") @db.Uuid
+  rawPayload     Json      @map("raw_payload") @db.JsonB
+  signatureValid Boolean   @map("signature_valid")
+  receivedAt     DateTime  @default(now()) @map("received_at") @db.Timestamptz
+  processedAt    DateTime? @map("processed_at") @db.Timestamptz
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@map("webhook_events")
+}
+
+model AuditLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  purchaseIntentId String?  @map("purchase_intent_id") @db.Uuid
+  actor            String
+  action           String
+  payload          Json?    @db.JsonB
+  correlationId    String?  @map("correlation_id")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  purchaseIntent PurchaseIntent? @relation(fields: [purchaseIntentId], references: [id], onDelete: SetNull)
+
+  @@index([purchaseIntentId])
+  @@index([correlationId])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  type      String?
+  message   String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("notifications")
 }

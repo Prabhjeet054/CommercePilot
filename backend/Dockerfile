@@ -5,15 +5,17 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY tsconfig.json ./
+COPY prisma ./prisma
 COPY src ./src
-RUN npm run build
+RUN npx prisma generate && npm run build
 
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+COPY prisma ./prisma
+RUN npm ci --omit=dev && npx prisma generate
 
 COPY --from=build /app/dist ./dist
 
