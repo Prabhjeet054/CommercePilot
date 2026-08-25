@@ -37,6 +37,7 @@ const envSchema = z.object({
     .string({ required_error: "JWT_REFRESH_SECRET is required" })
     .min(16, "JWT_REFRESH_SECRET must be at least 16 characters"),
   COOKIE_SECURE: z.enum(["true", "false"]).optional(),
+  // Consumed by getLLMProvider(); "openai" is the real adapter, "mock" forces the test double.
   LLM_PROVIDER: z.string().optional(),
   LLM_PROVIDER_API_KEY: z.string().optional(),
 });

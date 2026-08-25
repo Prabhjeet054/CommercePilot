@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "llm:smoke": "ts-node --transpile-only scripts/llm-smoke.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
@@ -23,6 +24,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "jsonwebtoken": "^9.0.2",
+    "openai": "^7.5.0",
     "prisma": "^6.14.0",
     "zod": "^3.24.2"
   },
