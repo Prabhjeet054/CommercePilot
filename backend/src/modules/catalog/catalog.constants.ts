@@ -23,3 +23,7 @@ export const DEMO_LAPTOP_PRICE = "120000.00";
 
 export const DEFAULT_PAGE_SIZE = 50;
 export const MAX_PAGE_SIZE = 100;
+
+/** Seeded catalog categories from Phase 4 — the only values discovery can filter on. */
+export const CATALOG_CATEGORIES = ["Electronics", "Sports", "Travel"] as const;
+export type CatalogCategory = (typeof CATALOG_CATEGORIES)[number];

@@ -9,6 +9,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "llm:smoke": "ts-node --transpile-only scripts/llm-smoke.ts",
+    "intent:smoke": "ts-node --transpile-only scripts/intent-smoke.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
