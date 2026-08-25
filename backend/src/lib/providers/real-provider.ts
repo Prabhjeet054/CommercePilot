@@ -177,7 +177,9 @@ function resolveProviderName(raw: string | undefined): "openai" {
 }
 
 export class RealLLMProvider implements LLMProvider {
-  private readonly client: ChatCompletionLike;
+  private readonly injectedClient: ChatCompletionLike | undefined;
+  private liveClient: ChatCompletionLike | undefined;
+  private readonly apiKey: string;
   private readonly model: string;
 
   constructor(options: RealLLMProviderOptions) {
@@ -189,13 +191,22 @@ export class RealLLMProvider implements LLMProvider {
       );
     }
 
+    this.apiKey = apiKey;
     this.model = options.model?.trim() || DEFAULT_MODEL;
-    this.client =
-      options.client ??
-      (new OpenAI({
-        apiKey,
+    this.injectedClient = options.client;
+  }
+
+  private client(): ChatCompletionLike {
+    if (this.injectedClient) {
+      return this.injectedClient;
+    }
+    if (!this.liveClient) {
+      this.liveClient = new OpenAI({
+        apiKey: this.apiKey,
         maxRetries: 0,
-      }) as ChatCompletionLike);
+      }) as ChatCompletionLike;
+    }
+    return this.liveClient;
   }
 
   static fromEnv(env: Pick<Env, "LLM_PROVIDER" | "LLM_PROVIDER_API_KEY">): RealLLMProvider {
@@ -234,7 +245,7 @@ export class RealLLMProvider implements LLMProvider {
     }
 
     try {
-      const completion = await this.client.chat.completions.create(
+      const completion = await this.client().chat.completions.create(
         {
           model: this.model,
           messages,
