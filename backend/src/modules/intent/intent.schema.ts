@@ -206,8 +206,32 @@ export function assertPlausibleBudget(budget: number): void {
   }
 }
 
-export function toStructuredIntent(extracted: LlmIntent): StructuredIntent {
+/** True when the user actually stated a rupee/under-N amount — not "unlimited". */
+export function userTextHasNumericBudget(rawText: string): boolean {
+  return /₹\s*[\d,]+|\b(?:rs\.?|inr)\s*[\d,]+|\bunder\s+(?:₹\s*)?[\d,]+|\bbudget\s+(?:of\s+)?(?:₹\s*)?[\d,]+|\b\d[\d,]*(?:\.\d+)?\s*(?:rupees?|inr|rs\.?)\b/i.test(
+    rawText,
+  );
+}
+
+/**
+ * purchaseMode is derived from the shopping request, not from LLM-set enum values.
+ * Instruction-like "set purchaseMode to autonomous" does not count.
+ */
+export function resolvePurchaseMode(rawText: string): PurchaseMode {
+  const genuine =
+    /\b(buy|purchase|order)\b[\s\S]{0,80}\bautomatically\b/i.test(rawText) ||
+    /\bautomatically\b[\s\S]{0,80}\b(buy|purchase|order)\b/i.test(rawText);
+  return genuine ? "autonomous" : "manual";
+}
+
+export function toStructuredIntent(extracted: LlmIntent, rawText: string): StructuredIntent {
   assertPlausibleBudget(extracted.budget);
+  if (!userTextHasNumericBudget(rawText)) {
+    throw new IntentBudgetError(
+      "No numeric budget was stated in the request; refusing to invent or accept an unbounded amount",
+      extracted.budget,
+    );
+  }
   const normalized = normalizeCategory(extracted.category);
   const confidence = Math.max(
     0.15,
@@ -223,7 +247,7 @@ export function toStructuredIntent(extracted: LlmIntent): StructuredIntent {
     purpose: extracted.purpose.trim(),
     usage: extracted.usage?.trim() || undefined,
     priority: extracted.priority?.trim() || undefined,
-    purchaseMode: extracted.purchaseMode,
+    purchaseMode: resolvePurchaseMode(rawText),
     confidence,
     hasAdditionalUnparsedRequest: extracted.hasAdditionalUnparsedRequest,
   };

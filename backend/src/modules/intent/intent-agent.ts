@@ -87,5 +87,5 @@ export async function extractIntent(
     wrapProviderError(err);
   }
 
-  return toStructuredIntent(extracted);
+  return toStructuredIntent(extracted, rawText.trim());
 }
