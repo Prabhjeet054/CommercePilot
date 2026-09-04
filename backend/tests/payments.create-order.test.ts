@@ -202,6 +202,36 @@ describe("POST /payments/create-order", () => {
     expect(await prisma.order.count({ where: { purchaseIntentId: intent.id } })).toBe(1);
   });
 
+  it("ignores a client-supplied amount and charges the catalog product price", async () => {
+    const customer = await registerCustomer();
+    const intent = await createPayableIntent(customer.user.id);
+
+    const response = await request(app)
+      .post("/payments/create-order")
+      .set(authHeader(customer.token))
+      .send({
+        purchaseIntentId: intent.id,
+        amount: 1,
+        amountInPaise: 100,
+        currency: "USD",
+        razorpayOrderId: "order_forged_by_client",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.amount).toBe(449900);
+    expect(response.body.currency).toBe("INR");
+    expect(response.body.razorpayOrderId).toBe(razorpay.nextId);
+    expect(response.body.razorpayOrderId).not.toBe("order_forged_by_client");
+    expect(razorpay.calls).toHaveLength(1);
+    expect(razorpay.calls[0]?.amount).toBe(449900);
+    expect(razorpay.calls[0]?.amount).not.toBe(1);
+    expect(razorpay.calls[0]?.currency).toBe("INR");
+
+    const stored = await prisma.order.findUniqueOrThrow({ where: { purchaseIntentId: intent.id } });
+    expect(stored.amount.toFixed(2)).toBe(DEMO_SHOE_PRICE);
+    expect(stored.razorpayOrderId).toBe(razorpay.nextId);
+  });
+
   it("returns 404 (not 403) for another customer's purchase intent", async () => {
     const owner = await registerCustomer();
     const other = await registerCustomer();

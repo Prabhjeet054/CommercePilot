@@ -1,8 +1,10 @@
 import { z } from "zod";
 
-export const createOrderBodySchema = z.object({
-  purchaseIntentId: z.string().uuid(),
-});
+export const createOrderBodySchema = z
+  .object({
+    purchaseIntentId: z.string().uuid(),
+  })
+  .strip();
 
 export type CreateOrderBody = z.infer<typeof createOrderBodySchema>;
 
