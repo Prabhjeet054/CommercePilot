@@ -131,14 +131,14 @@ async function getIntent(accessToken: string, intentId: string): Promise<{
   return (await response.json()) as Awaited<ReturnType<typeof getIntent>>;
 }
 
-async function assertNoRazorpayOrder(userId: string, intentId: string): Promise<void> {
-  const orders = await prisma.order.findMany({
-    where: { OR: [{ purchaseIntentId: intentId }, { purchaseIntent: { userId } }] },
-    select: { id: true, razorpayOrderId: true, purchaseIntentId: true },
+async function assertNoPopulatedRazorpayOrderId(userId: string, intentId: string): Promise<void> {
+  const populated = await prisma.order.count({
+    where: {
+      razorpayOrderId: { not: null },
+      OR: [{ purchaseIntentId: intentId }, { purchaseIntent: { userId } }],
+    },
   });
-  for (const order of orders) {
-    expect(order.razorpayOrderId, `Order ${order.id} has a Razorpay id`).toBeNull();
-  }
+  expect(populated, "Order.razorpayOrderId must not be populated").toBe(0);
 }
 
 test.describe.configure({ mode: "serial", timeout: 90_000 });
@@ -178,11 +178,13 @@ test("A: register → demo policy → shoe intent reaches POLICY_ALLOWED / ALLOW
   });
   expect(db.userId).toBe(userId);
   expect(db.status).toBe("POLICY_ALLOWED");
+  expect(db.status).not.toBe("ORDER_CREATED");
   expect(db.order).toBeNull();
   expect(db.approval).toBeNull();
   expect(db.policyEvaluations[0]?.decision).toBe("ALLOW");
   expect(db.policyEvaluations[0]?.reasonCode).toBe("WITHIN_POLICY");
-  await assertNoRazorpayOrder(userId, intentId);
+  expect(await prisma.order.count({ where: { purchaseIntentId: intentId } })).toBe(0);
+  await assertNoPopulatedRazorpayOrderId(userId, intentId);
   razorpay.assertNone();
 });
 
@@ -207,6 +209,7 @@ test("B: register → demo policy → laptop intent → APPROVAL_PENDING → app
     reasonCode: "DAILY_LIMIT_EXCEEDED",
   });
   expect(pending.approval?.status).toBe("PENDING");
+  expect(pending.approval?.reasonCode).toBe("DAILY_LIMIT_EXCEEDED");
   const approvalId = pending.approval?.id;
   expect(approvalId).toBeTruthy();
 
@@ -222,9 +225,14 @@ test("B: register → demo policy → laptop intent → APPROVAL_PENDING → app
 
   const approved = await getIntent(accessToken, intentId);
   expect(approved.status).toBe("APPROVED");
+  expect(approved.status).not.toBe("ORDER_CREATED");
   expect(approved.orderCount).toBe(0);
   expect(approved.approval?.status).toBe("APPROVED");
-  expect(approved.policyEvaluations[0]?.decision).toBe("REQUIRE_APPROVAL");
+  expect(approved.approval?.reasonCode).toBe("DAILY_LIMIT_EXCEEDED");
+  expect(approved.policyEvaluations[0]).toMatchObject({
+    decision: "REQUIRE_APPROVAL",
+    reasonCode: "DAILY_LIMIT_EXCEEDED",
+  });
 
   await page.goto(`/shop/${intentId}/review`);
   await expect(page.getByText(/you approved this purchase/i)).toBeVisible();
@@ -235,10 +243,13 @@ test("B: register → demo policy → laptop intent → APPROVAL_PENDING → app
     include: { order: true, approval: true },
   });
   expect(db.status).toBe("APPROVED");
+  expect(db.status).not.toBe("ORDER_CREATED");
   expect(db.order).toBeNull();
   expect(db.approval?.status).toBe("APPROVED");
+  expect(db.approval?.reasonCode).toBe("DAILY_LIMIT_EXCEEDED");
   expect(db.approval?.consumedAt).not.toBeNull();
-  await assertNoRazorpayOrder(userId, intentId);
+  expect(await prisma.order.count({ where: { purchaseIntentId: intentId } })).toBe(0);
+  await assertNoPopulatedRazorpayOrderId(userId, intentId);
   razorpay.assertNone();
 });
 
@@ -253,6 +264,10 @@ test("C: register → demo policy → laptop intent → reject → APPROVAL_REJE
   await expect(page.getByText("REQUIRE_APPROVAL · DAILY_LIMIT_EXCEEDED")).toBeVisible();
   const pending = await getIntent(accessToken, intentId);
   expect(pending.status).toBe("APPROVAL_PENDING");
+  expect(pending.policyEvaluations[0]).toMatchObject({
+    decision: "REQUIRE_APPROVAL",
+    reasonCode: "DAILY_LIMIT_EXCEEDED",
+  });
   const beforeRuns = await prisma.agentRun.count({ where: { purchaseIntentId: intentId } });
 
   await page.getByRole("link", { name: /open approval screen/i }).click();
@@ -264,8 +279,10 @@ test("C: register → demo policy → laptop intent → reject → APPROVAL_REJE
 
   const rejected = await getIntent(accessToken, intentId);
   expect(rejected.status).toBe("APPROVAL_REJECTED");
+  expect(rejected.status).not.toBe("ORDER_CREATED");
   expect(rejected.orderCount).toBe(0);
   expect(rejected.approval?.status).toBe("REJECTED");
+  expect(rejected.approval?.reasonCode).toBe("DAILY_LIMIT_EXCEEDED");
 
   await page.goto(`/shop/${intentId}/review`);
   await expect(page.getByText(/you rejected this purchase/i)).toBeVisible();
@@ -276,11 +293,14 @@ test("C: register → demo policy → laptop intent → reject → APPROVAL_REJE
     include: { order: true, approval: true },
   });
   expect(db.status).toBe("APPROVAL_REJECTED");
+  expect(db.status).not.toBe("ORDER_CREATED");
   expect(db.order).toBeNull();
   expect(db.approval?.status).toBe("REJECTED");
+  expect(db.approval?.reasonCode).toBe("DAILY_LIMIT_EXCEEDED");
   expect(await prisma.order.count({ where: { purchaseIntentId: intentId } })).toBe(0);
+  expect(await prisma.approval.count({ where: { purchaseIntentId: intentId } })).toBe(1);
   expect(await prisma.agentRun.count({ where: { purchaseIntentId: intentId } })).toBe(beforeRuns);
-  await assertNoRazorpayOrder(userId, intentId);
+  await assertNoPopulatedRazorpayOrderId(userId, intentId);
   razorpay.assertNone();
 });
 
@@ -313,11 +333,14 @@ test("D: blocked-category intent reaches POLICY_DENIED with zero Order/Approval 
     include: { order: true, approval: true, agentRun: true, policyEvaluations: true },
   });
   expect(db.status).toBe("POLICY_DENIED");
+  expect(db.status).not.toBe("ORDER_CREATED");
   expect(db.order).toBeNull();
   expect(db.approval).toBeNull();
   expect(db.agentRun).not.toBeNull();
+  expect(db.policyEvaluations[0]?.decision).toBe("DENY");
+  expect(db.policyEvaluations[0]?.reasonCode).toBe("CATEGORY_BLOCKED");
   expect(await prisma.order.count({ where: { purchaseIntent: { userId } } })).toBe(0);
   expect(await prisma.approval.count({ where: { userId } })).toBe(0);
-  await assertNoRazorpayOrder(userId, intentId);
+  await assertNoPopulatedRazorpayOrderId(userId, intentId);
   razorpay.assertNone();
 });
