@@ -245,7 +245,7 @@ export async function runPurchaseIntentPipeline(
   try {
     intent = await extractIntent(input.text);
   } catch (err) {
-    await prisma.agentRun.update({
+    await prisma.agentRun.updateMany({
       where: { id: agentRun.id },
       data: { status: "FAILED", completedAt: new Date() },
     });
@@ -284,7 +284,7 @@ export async function runPurchaseIntentPipeline(
   });
 
   if (candidates.length === 0) {
-    await prisma.agentRun.update({
+    await prisma.agentRun.updateMany({
       where: { id: agentRun.id },
       data: { status: PIPELINE_RESULT.NO_MATCHING_PRODUCTS, completedAt: new Date() },
     });
@@ -320,7 +320,7 @@ export async function runPurchaseIntentPipeline(
   const rankedCandidates = toRankedDtos(ranked, candidatesById, selectedId);
 
   if (!selected || !selectedId) {
-    await prisma.agentRun.update({
+    await prisma.agentRun.updateMany({
       where: { id: agentRun.id },
       data: { status: PIPELINE_RESULT.NO_MATCHING_PRODUCTS, completedAt: new Date() },
     });
@@ -404,7 +404,7 @@ export async function runPurchaseIntentPipeline(
     });
   }
   await applyPurchaseIntentEvent(created.id, policyEventForDecision(policy.decision));
-  await prisma.agentRun.update({
+  await prisma.agentRun.updateMany({
     where: { id: agentRun.id },
     data: { status: "COMPLETED", completedAt: new Date() },
   });

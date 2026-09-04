@@ -5,6 +5,8 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     setupFiles: ["tests/setup.ts"],
+    // Shared Postgres: avoid cross-file teardown races (e.g. schema cleanup vs live pipelines).
+    fileParallelism: false,
     coverage: {
       provider: "v8",
       include: ["src/modules/policy/evaluate.ts"],

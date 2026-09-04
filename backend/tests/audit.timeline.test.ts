@@ -225,13 +225,28 @@ describe("Phase 20 audit timeline", () => {
     );
     expect(correlationIds.size).toBe(1);
 
-    for (const event of timeline.body.events as Array<{ payload: unknown }>) {
-      const text = JSON.stringify(event.payload ?? {});
-      expect(text).not.toContain("RAZORPAY_KEY_SECRET");
-      expect(text).not.toContain("RAZORPAY_WEBHOOK_SECRET");
-      expect(text).not.toContain(KEY_SECRET);
-      expect(text).not.toContain(WEBHOOK_SECRET);
-      expect(text.toLowerCase()).not.toContain("password");
+    // Secret-leak scan against real persisted AuditLog rows (not synthetic fixtures).
+    const persisted = await prisma.auditLog.findMany({ where: { purchaseIntentId: intentId } });
+    expect(persisted).toHaveLength(expectedPrefix.length);
+    const jwtLike = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/;
+    const bcryptLike = /\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}/;
+    for (const row of persisted) {
+      const blob = JSON.stringify({
+        action: row.action,
+        actor: row.actor,
+        payload: row.payload,
+        correlationId: row.correlationId,
+      });
+      expect(blob).not.toContain("RAZORPAY_KEY_SECRET");
+      expect(blob).not.toContain("RAZORPAY_WEBHOOK_SECRET");
+      expect(blob).not.toContain("JWT_SECRET");
+      expect(blob).not.toContain("JWT_REFRESH_SECRET");
+      expect(blob).not.toContain(KEY_SECRET);
+      expect(blob).not.toContain(WEBHOOK_SECRET);
+      expect(blob).not.toContain(JWT_SECRET);
+      expect(blob.toLowerCase()).not.toContain("passwordhash");
+      expect(blob).not.toMatch(jwtLike);
+      expect(blob).not.toMatch(bcryptLike);
     }
 
     // Append-only: no mutating routes on audit logs.

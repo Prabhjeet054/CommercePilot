@@ -60,15 +60,23 @@ describe("Prisma schema constraints", () => {
     await prisma.webhookEvent.deleteMany({ where: { eventId: { startsWith: "evt_schema_test_" } } });
     await prisma.payment.deleteMany({ where: { razorpayPaymentId: { startsWith: "pay_schema_test_" } } });
     await prisma.order.deleteMany({ where: { razorpayOrderId: { startsWith: "order_schema_test_" } } });
-    await prisma.approval.deleteMany();
-    await prisma.policyEvaluation.deleteMany({
-      where: { purchaseIntent: { rawText: "buy running shoes under 5000" } },
+    await prisma.approval.deleteMany({
+      where: { user: { email: { startsWith: "schema-test-" } } },
     });
-    await prisma.agentDecision.deleteMany();
-    await prisma.agentRun.deleteMany();
-    await prisma.auditLog.deleteMany();
+    await prisma.policyEvaluation.deleteMany({
+      where: { purchaseIntent: { user: { email: { startsWith: "schema-test-" } } } },
+    });
+    await prisma.agentDecision.deleteMany({
+      where: { agentRun: { purchaseIntent: { user: { email: { startsWith: "schema-test-" } } } } },
+    });
+    await prisma.agentRun.deleteMany({
+      where: { purchaseIntent: { user: { email: { startsWith: "schema-test-" } } } },
+    });
+    await prisma.auditLog.deleteMany({
+      where: { purchaseIntent: { user: { email: { startsWith: "schema-test-" } } } },
+    });
     await prisma.purchaseIntent.deleteMany({
-      where: { rawText: "buy running shoes under 5000" },
+      where: { user: { email: { startsWith: "schema-test-" } } },
     });
     await prisma.productAttribute.deleteMany({
       where: { product: { name: "Schema Test Product" } },
@@ -77,8 +85,12 @@ describe("Prisma schema constraints", () => {
     await prisma.financialPolicy.deleteMany({
       where: { user: { email: { startsWith: "schema-test-" } } },
     });
-    await prisma.userPreference.deleteMany();
-    await prisma.notification.deleteMany();
+    await prisma.userPreference.deleteMany({
+      where: { user: { email: { startsWith: "schema-test-" } } },
+    });
+    await prisma.notification.deleteMany({
+      where: { user: { email: { startsWith: "schema-test-" } } },
+    });
     await prisma.user.deleteMany({ where: { email: { startsWith: "schema-test-" } } });
     await prisma.merchant.deleteMany({ where: { name: { startsWith: "Schema Test Merchant " } } });
     await prisma.$disconnect();
