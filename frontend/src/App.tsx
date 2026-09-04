@@ -12,6 +12,7 @@ import ProductManagementPage from "@/pages/ProductManagement";
 import PurchaseReviewPage from "@/pages/PurchaseReview";
 import PaymentScreen from "@/pages/PaymentScreen";
 import OrderSuccessPage from "@/pages/OrderSuccess";
+import AgentDecisionTimelinePage from "@/pages/AgentDecisionTimeline";
 import RegisterPage from "@/pages/Register";
 
 function LandingPage() {
@@ -177,6 +178,14 @@ export default function App() {
         element={
           <ProtectedRoute roles={["customer"]}>
             <OrderSuccessPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shop/:intentId/timeline"
+        element={
+          <ProtectedRoute roles={["customer"]}>
+            <AgentDecisionTimelinePage />
           </ProtectedRoute>
         }
       />

@@ -1,4 +1,5 @@
 import { prisma } from "../../lib/prisma";
+import { recordAudit, resolveCorrelationId } from "../audit/audit.service";
 import { createInternalOrder, type InternalOrder } from "../orders/order.service";
 import {
   getRazorpayClient,
@@ -103,6 +104,20 @@ export async function createRazorpayOrder(
     data: { razorpayOrderId: created.id },
   });
 
+  const correlationId = await resolveCorrelationId(updated.purchaseIntentId);
+  await recordAudit({
+    purchaseIntentId: updated.purchaseIntentId,
+    actor: "system",
+    action: "payment_initiated",
+    correlationId,
+    payload: {
+      orderId: updated.id,
+      razorpayOrderId: created.id,
+      amountInPaise: paise,
+      currency: updated.currency,
+    },
+  });
+
   return toCreateOrderResult(
     {
       id: updated.id,
@@ -188,6 +203,20 @@ export async function createRazorpayOrderForPurchaseIntent(
     if (!internal.razorpayOrderId) {
       throw new RazorpayApiError("Internal order persisted without razorpayOrderId");
     }
+
+    const correlationId = await resolveCorrelationId(intent.id);
+    await recordAudit({
+      purchaseIntentId: intent.id,
+      actor: "system",
+      action: "payment_initiated",
+      correlationId,
+      payload: {
+        orderId: internal.id,
+        razorpayOrderId: internal.razorpayOrderId,
+        amountInPaise: paise,
+        currency: internal.currency,
+      },
+    });
 
     return toCreateOrderResult(internal, internal.razorpayOrderId);
   } catch (err) {

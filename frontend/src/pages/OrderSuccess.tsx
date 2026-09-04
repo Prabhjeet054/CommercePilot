@@ -88,7 +88,7 @@ export default function OrderSuccessPage() {
               </p>
               <div className="flex flex-wrap gap-3">
                 <Button asChild variant="outline">
-                  <Link to={`/shop/${view.id}`} data-testid="order-success-timeline-link">
+                  <Link to={`/shop/${view.id}/timeline`} data-testid="order-success-timeline-link">
                     View decision timeline
                   </Link>
                 </Button>
@@ -97,7 +97,7 @@ export default function OrderSuccessPage() {
                 </Button>
               </div>
               <p className="font-mono text-[11px] text-muted-foreground">
-                Decision timeline detail lands in Phase 20.
+                Full decision timeline is available above.
               </p>
             </div>
           )}

@@ -6,6 +6,7 @@ import {
   policyEventForDecision,
 } from "../../lib/state-machine";
 import { createApproval } from "../approvals/approval.service";
+import { newCorrelationId, recordAudit } from "../audit/audit.service";
 import { extractIntent } from "../intent/intent-agent";
 import type { PurchaseMode, StructuredIntent } from "../intent/intent.schema";
 import { evaluateAndPersist } from "../policy/policy.service";
@@ -211,6 +212,7 @@ export type RunPurchaseIntentInput = {
 export async function runPurchaseIntentPipeline(
   input: RunPurchaseIntentInput,
 ): Promise<PurchaseIntentPipelineResult> {
+  const correlationId = newCorrelationId();
   const created = await prisma.purchaseIntent.create({
     data: {
       userId: input.userId,
@@ -218,6 +220,17 @@ export async function runPurchaseIntentPipeline(
       structuredIntent: {},
       purchaseMode: input.purchaseMode,
       status: INITIAL_INTENT_STATE,
+    },
+  });
+
+  await recordAudit({
+    purchaseIntentId: created.id,
+    actor: "system",
+    action: "intent_received",
+    correlationId,
+    payload: {
+      purchaseMode: input.purchaseMode,
+      textLength: input.text.length,
     },
   });
 
@@ -248,9 +261,27 @@ export async function runPurchaseIntentPipeline(
     },
   });
   await applyPurchaseIntentEvent(created.id, "intent_extracted");
+  await recordAudit({
+    purchaseIntentId: created.id,
+    actor: "agent",
+    action: "intent_extracted",
+    correlationId,
+    payload: {
+      category: intent.category ?? null,
+      budget: intent.budget ?? null,
+      confidence: intent.confidence ?? null,
+    },
+  });
 
   const candidates = await discoverCatalogCandidates(intent);
   const candidatesById = new Map(candidates.map((product) => [product.id, product]));
+  await recordAudit({
+    purchaseIntentId: created.id,
+    actor: "agent",
+    action: "products_searched",
+    correlationId,
+    payload: { candidateCount: candidates.length },
+  });
 
   if (candidates.length === 0) {
     await prisma.agentRun.update({
@@ -274,6 +305,17 @@ export async function runPurchaseIntentPipeline(
   const selectedId = selected?.product.id ?? null;
   await persistDecisions(agentRun.id, ranked, selectedId);
   await applyPurchaseIntentEvent(created.id, "products_ranked");
+  await recordAudit({
+    purchaseIntentId: created.id,
+    actor: "agent",
+    action: "products_ranked",
+    correlationId,
+    payload: {
+      rankedCount: ranked.length,
+      topProductId: ranked[0]?.product.id ?? null,
+      topScore: ranked[0]?.score ?? null,
+    },
+  });
 
   const rankedCandidates = toRankedDtos(ranked, candidatesById, selectedId);
 
@@ -300,6 +342,19 @@ export async function runPurchaseIntentPipeline(
     throw new Error("Selected product missing from discovery set");
   }
 
+  await recordAudit({
+    purchaseIntentId: created.id,
+    actor: "agent",
+    action: "recommendation_created",
+    correlationId,
+    payload: {
+      productId: discovered.id,
+      name: discovered.name,
+      price: rupees(discovered.price),
+      category: discovered.category,
+    },
+  });
+
   const proposal = buildPolicyProposal(input.userId, discovered);
 
   const policy = await evaluateAndPersist({
@@ -309,6 +364,19 @@ export async function runPurchaseIntentPipeline(
       amount: proposal.amount,
       category: proposal.category,
       merchantId: proposal.merchantId,
+    },
+  });
+
+  await recordAudit({
+    purchaseIntentId: created.id,
+    actor: "system",
+    action: "policy_evaluated",
+    correlationId,
+    payload: {
+      decision: policy.decision,
+      reasonCode: policy.reasonCode,
+      evaluationId: policy.evaluation.id,
+      amount: proposal.amount,
     },
   });
 
@@ -322,6 +390,17 @@ export async function runPurchaseIntentPipeline(
       amount: proposal.amount,
       policyEvaluationId: policy.evaluation.id,
       reasonCode: policy.reasonCode,
+    });
+    await recordAudit({
+      purchaseIntentId: created.id,
+      actor: "system",
+      action: "approval_requested",
+      correlationId,
+      payload: {
+        approvalId: approval.id,
+        reasonCode: policy.reasonCode,
+        amount: proposal.amount,
+      },
     });
   }
   await applyPurchaseIntentEvent(created.id, policyEventForDecision(policy.decision));

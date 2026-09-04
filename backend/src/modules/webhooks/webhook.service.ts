@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { verifySignature } from "../../lib/hmac";
 import { loadEnv } from "../../config/env";
 import { prisma } from "../../lib/prisma";
+import { recordAudit, resolveCorrelationId } from "../audit/audit.service";
 import { applyOrderLifecycleEvent } from "../orders/order.service";
 import type { OrderState } from "../../lib/state-machine";
 
@@ -218,6 +219,46 @@ export async function handleRazorpayWebhook(input: {
     nextState = await applyPaymentFailed(order.id, nextState);
   } else if (eventType === "payment.authorized") {
     nextState = await applyPaymentAuthorized(order.id, nextState);
+  }
+
+  const correlationId = await resolveCorrelationId(order.purchaseIntentId);
+  await recordAudit({
+    purchaseIntentId: order.purchaseIntentId,
+    actor: "razorpay_webhook",
+    action: "webhook_received",
+    correlationId,
+    payload: {
+      eventId: input.eventId,
+      eventType,
+      razorpayOrderId,
+      orderState: nextState,
+    },
+  });
+
+  if (nextState === "COMPLETED") {
+    await recordAudit({
+      purchaseIntentId: order.purchaseIntentId,
+      actor: "razorpay_webhook",
+      action: "order_completed",
+      correlationId,
+      payload: {
+        orderId: order.id,
+        eventType,
+      },
+    });
+  }
+
+  if (nextState === "PAYMENT_FAILED") {
+    await recordAudit({
+      purchaseIntentId: order.purchaseIntentId,
+      actor: "razorpay_webhook",
+      action: "payment_failed",
+      correlationId,
+      payload: {
+        orderId: order.id,
+        eventType,
+      },
+    });
   }
 
   await prisma.webhookEvent.update({

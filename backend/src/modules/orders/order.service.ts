@@ -6,6 +6,7 @@ import {
   type OrderState,
 } from "../../lib/state-machine";
 import { prisma } from "../../lib/prisma";
+import { recordAudit, resolveCorrelationId } from "../audit/audit.service";
 
 export type CreateInternalOrderInput = {
   purchaseIntentId: string;
@@ -71,6 +72,20 @@ export async function createInternalOrder(input: CreateInternalOrderInput): Prom
         razorpayOrderId: input.razorpayOrderId ?? null,
       },
     });
+  });
+
+  const correlationId = await resolveCorrelationId(input.purchaseIntentId);
+  await recordAudit({
+    purchaseIntentId: input.purchaseIntentId,
+    actor: "system",
+    action: "order_created",
+    correlationId,
+    payload: {
+      orderId: order.id,
+      amount: order.amount.toFixed(2),
+      currency: order.currency,
+      razorpayOrderId: order.razorpayOrderId,
+    },
   });
 
   return serializeOrder(order);

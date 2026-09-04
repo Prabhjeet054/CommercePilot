@@ -5,6 +5,7 @@ import { isAllowedFrontendOrigin } from "./lib/cors-origin";
 import type { Env } from "./config/env";
 import { LLMConfigError } from "./lib/llm-provider";
 import { createApprovalRouter } from "./modules/approvals/approval.routes";
+import { createAuditRouter } from "./modules/audit/audit.routes";
 import { createAuthRouter } from "./modules/auth/auth.routes";
 import { createCatalogRouter } from "./modules/catalog/catalog.routes";
 import { createOrchestratorRouter } from "./modules/orchestrator/orchestrator.routes";
@@ -62,6 +63,7 @@ export function createApp(config: AppConfig): Express {
   app.use(createOrchestratorRouter());
   app.use(createApprovalRouter());
   app.use(createPaymentsRouter());
+  app.use(createAuditRouter());
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof LLMConfigError) {

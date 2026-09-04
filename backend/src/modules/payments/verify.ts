@@ -3,6 +3,7 @@ import {
   verifySignature,
 } from "../../lib/hmac";
 import { prisma } from "../../lib/prisma";
+import { recordAudit, resolveCorrelationId } from "../audit/audit.service";
 import { applyOrderLifecycleEvent } from "../orders/order.service";
 import { getRazorpayKeySecret, RazorpayConfigError } from "./razorpay-client";
 
@@ -203,5 +204,19 @@ export async function verifyCheckoutPayment(input: {
   }
 
   const next = await applyOrderLifecycleEvent(order.id, "signature_verified");
+  const correlationId = await resolveCorrelationId(order.purchaseIntentId);
+  await recordAudit({
+    purchaseIntentId: order.purchaseIntentId,
+    actor: input.userId,
+    action: "payment_verified",
+    correlationId,
+    payload: {
+      orderId: order.id,
+      razorpayOrderId: input.razorpayOrderId,
+      razorpayPaymentId: input.razorpayPaymentId,
+      orderState: next,
+      // deliberately omit razorpaySignature
+    },
+  });
   return { verified: true, orderState: next };
 }

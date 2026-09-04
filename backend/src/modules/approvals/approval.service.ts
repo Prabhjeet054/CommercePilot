@@ -2,6 +2,7 @@ import { Prisma, type Approval } from "@prisma/client";
 import { loadEnv } from "../../config/env";
 import { applyPurchaseIntentEvent, IllegalTransitionError } from "../../lib/state-machine";
 import { prisma } from "../../lib/prisma";
+import { recordAudit, resolveCorrelationId } from "../audit/audit.service";
 import type { PolicySnapshot } from "../policy/policy.service";
 
 export const DECISION_CONFLICT = {
@@ -229,6 +230,17 @@ export async function decideApproval(
   });
 
   if (applied) {
+    const correlationId = await resolveCorrelationId(applied.purchaseIntentId);
+    await recordAudit({
+      purchaseIntentId: applied.purchaseIntentId,
+      actor: userId,
+      action: decision === "approve" ? "approval_granted" : "approval_rejected",
+      correlationId,
+      payload: {
+        approvalId: applied.id,
+        status: applied.status,
+      },
+    });
     return { ok: true, approval: applied };
   }
 
