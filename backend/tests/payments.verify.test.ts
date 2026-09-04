@@ -1,5 +1,7 @@
 import { createHmac, randomUUID } from "crypto";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { readFileSync } from "fs";
+import path from "path";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app";
 import { signRazorpayCheckoutPayload } from "../src/lib/hmac";
@@ -171,7 +173,10 @@ describe("POST /payments/verify", () => {
     const paymentId = `pay_bad_${randomUUID().slice(0, 8)}`;
     const genuine = signRazorpayCheckoutPayload(order.razorpayOrderId, paymentId, RAZORPAY_SECRET);
     const tampered = `${genuine.slice(0, -1)}${genuine.endsWith("a") ? "b" : "a"}`;
+    expect(tampered.length).toBe(genuine.length);
     expect(tampered).not.toBe(genuine);
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     const response = await request(app)
       .post("/payments/verify")
@@ -187,6 +192,14 @@ describe("POST /payments/verify", () => {
     expect(response.body.reasonCode).toBe("SIGNATURE_MISMATCH");
     expect(response.body.orderState).toBe("PAYMENT_VERIFICATION_FAILED");
 
+    const mismatchLogs = errorSpy.mock.calls
+      .map((args) => String(args[0] ?? ""))
+      .filter((line) => line.includes("payment_verification_failed"));
+    expect(mismatchLogs.length).toBeGreaterThan(0);
+    expect(mismatchLogs.some((line) => line.includes("SIGNATURE_MISMATCH"))).toBe(true);
+    expect(mismatchLogs.every((line) => !line.includes(RAZORPAY_SECRET))).toBe(true);
+    errorSpy.mockRestore();
+
     const storedOrder = await prisma.order.findUniqueOrThrow({
       where: { razorpayOrderId: order.razorpayOrderId },
       include: { payments: true, purchaseIntent: true },
@@ -194,6 +207,68 @@ describe("POST /payments/verify", () => {
     expect(storedOrder.state).toBe("PAYMENT_VERIFICATION_FAILED");
     expect(storedOrder.purchaseIntent.status).toBe("PAYMENT_VERIFICATION_FAILED");
     expect(storedOrder.payments).toHaveLength(0);
+  });
+
+  it("rejects a fabricated order/payment pair even when the HMAC is correctly computed", async () => {
+    const customer = await registerCustomer();
+    const fabricatedOrderId = `order_fabricated_${randomUUID().slice(0, 8)}`;
+    const fabricatedPaymentId = `pay_fabricated_${randomUUID().slice(0, 8)}`;
+    // Attacker knows the secret in this unit test — still rejected because order_id is absent.
+    const signature = signRazorpayCheckoutPayload(fabricatedOrderId, fabricatedPaymentId, RAZORPAY_SECRET);
+
+    const response = await request(app)
+      .post("/payments/verify")
+      .set(authHeader(customer.token))
+      .send({
+        razorpay_order_id: fabricatedOrderId,
+        razorpay_payment_id: fabricatedPaymentId,
+        razorpay_signature: signature,
+      });
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: "NOT_FOUND" });
+    expect(await prisma.order.count({ where: { razorpayOrderId: fabricatedOrderId } })).toBe(0);
+    expect(await prisma.payment.count({ where: { razorpayPaymentId: fabricatedPaymentId } })).toBe(0);
+  });
+
+  it("ignores a client-supplied amount and has no amount field on the verify schema", async () => {
+    const customer = await registerCustomer();
+    const order = await createOrderFor(customer);
+    const paymentId = `pay_amt_${randomUUID().slice(0, 8)}`;
+    const signature = signRazorpayCheckoutPayload(order.razorpayOrderId, paymentId, RAZORPAY_SECRET);
+
+    const response = await request(app)
+      .post("/payments/verify")
+      .set(authHeader(customer.token))
+      .send({
+        razorpay_order_id: order.razorpayOrderId,
+        razorpay_payment_id: paymentId,
+        razorpay_signature: signature,
+        amount: 1,
+        amountInPaise: 100,
+        currency: "USD",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ verified: true, orderState: "PAYMENT_AUTHORIZED" });
+
+    const storedOrder = await prisma.order.findUniqueOrThrow({
+      where: { razorpayOrderId: order.razorpayOrderId },
+    });
+    // Catalog shoe amount is unchanged — verify never rewrote Order.amount from the body.
+    expect(storedOrder.amount.toFixed(2)).toBe(DEMO_SHOE_PRICE);
+
+    const schemaSource = readFileSync(
+      path.resolve(__dirname, "../src/modules/payments/payments.schema.ts"),
+      "utf8",
+    );
+    const verifySource = readFileSync(
+      path.resolve(__dirname, "../src/modules/payments/verify.ts"),
+      "utf8",
+    );
+    expect(schemaSource).toMatch(/verifyPaymentBodySchema[\s\S]*\.strip\(\)/);
+    expect(schemaSource).not.toMatch(/verifyPaymentBodySchema[\s\S]*\bamount\b/);
+    expect(verifySource).not.toMatch(/\bamount\b/);
   });
 
   it("treats a repeat verify for an already-verified payment as a safe no-op", async () => {
