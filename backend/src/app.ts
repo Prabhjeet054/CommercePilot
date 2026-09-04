@@ -7,6 +7,7 @@ import { createApprovalRouter } from "./modules/approvals/approval.routes";
 import { createAuthRouter } from "./modules/auth/auth.routes";
 import { createCatalogRouter } from "./modules/catalog/catalog.routes";
 import { createOrchestratorRouter } from "./modules/orchestrator/orchestrator.routes";
+import { createPaymentsRouter } from "./modules/payments/payments.routes";
 import { createPolicyRouter } from "./modules/policy/policy.routes";
 
 export type AppConfig = Pick<
@@ -50,6 +51,7 @@ export function createApp(config: AppConfig): Express {
   app.use(createPolicyRouter());
   app.use(createOrchestratorRouter());
   app.use(createApprovalRouter());
+  app.use(createPaymentsRouter());
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     const message = err instanceof Error ? err.message : "Internal error";

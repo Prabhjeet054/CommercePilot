@@ -7,6 +7,7 @@ export type CreateInternalOrderInput = {
   productId: string;
   amount: number;
   currency?: string;
+  razorpayOrderId?: string | null;
 };
 
 export type InternalOrder = {
@@ -40,10 +41,10 @@ function serializeOrder(row: {
 }
 
 /**
- * Creates the internal Order row (no Razorpay id — Phase 15) and moves the
- * purchase intent POLICY_ALLOWED | APPROVED → ORDER_CREATED through the
- * state machine. Not invoked by the pre-payment pipeline; Phase 15 will call
- * this once checkout is allowed to start.
+ * Creates the internal Order row and moves the purchase intent
+ * POLICY_ALLOWED | APPROVED → ORDER_CREATED through the state machine.
+ * Phase 15 passes `razorpayOrderId` only after a successful Orders API call
+ * so a Razorpay failure never advances this state.
  */
 export async function createInternalOrder(input: CreateInternalOrderInput): Promise<InternalOrder> {
   const intent = await prisma.purchaseIntent.findUniqueOrThrow({
@@ -62,6 +63,7 @@ export async function createInternalOrder(input: CreateInternalOrderInput): Prom
         amount: new Prisma.Decimal(input.amount.toFixed(2)),
         currency: input.currency ?? "INR",
         state: nextIntentState,
+        razorpayOrderId: input.razorpayOrderId ?? null,
       },
     });
   });

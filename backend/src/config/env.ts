@@ -41,6 +41,9 @@ const envSchema = z.object({
   LLM_PROVIDER: z.string().optional(),
   LLM_PROVIDER_API_KEY: z.string().optional(),
   APPROVAL_TTL_MINUTES: z.coerce.number().int().positive().max(24 * 60).default(15),
+  // Test-mode placeholders in .env.example only. Secret is backend-only.
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
