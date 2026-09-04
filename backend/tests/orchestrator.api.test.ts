@@ -247,7 +247,7 @@ describe("POST /purchase-intents", () => {
     expect(fetched.body.policyEvaluations[0].reasonCode).toBe(REASON.WITHIN_POLICY);
   });
 
-  it("reproduces the PRD laptop demo: APPROVAL_PENDING with DAILY_LIMIT_EXCEEDED", async () => {
+  it("reproduces the PRD laptop demo against the seeded policy: REQUIRE_APPROVAL (daily cap binds first)", async () => {
     installIntentFixtures();
     const customer = await registerCustomer();
     await putPolicy(customer.token);
@@ -263,17 +263,44 @@ describe("POST /purchase-intents", () => {
     expect(response.body.selectedProduct.id).toBe(DEMO_LAPTOP_PRODUCT_ID);
     expect(response.body.selectedProduct.price).toBe(DEMO_LAPTOP_PRICE);
     expect(response.body.policyDecision.decision).toBe("REQUIRE_APPROVAL");
+    // Demo policy dailySpendingLimit is ₹10,000; Phase 5 checks that before approvalThreshold.
     expect(response.body.policyDecision.reasonCode).toBe(REASON.DAILY_LIMIT_EXCEEDED);
 
     const stored = await prisma.purchaseIntent.findUniqueOrThrow({
       where: { id: response.body.id },
       include: { policyEvaluations: true, order: true, agentRun: { include: { decisions: true } } },
     });
+    expect(stored.policyEvaluations[0]?.decision).toBe("REQUIRE_APPROVAL");
     expect(stored.policyEvaluations[0]?.reasonCode).toBe(REASON.DAILY_LIMIT_EXCEEDED);
     expect(stored.order).toBeNull();
     expect(stored.agentRun?.decisions.some((row) => row.selected && row.productId === DEMO_LAPTOP_PRODUCT_ID)).toBe(
       true,
     );
+  });
+
+  it("laptop phrase yields REQUIRE_APPROVAL / AMOUNT_ABOVE_APPROVAL_THRESHOLD when the daily cap does not bind", async () => {
+    installIntentFixtures();
+    const customer = await registerCustomer();
+    await putPolicy(customer.token, { ...DEMO_POLICY, dailySpendingLimit: 200_000 });
+
+    const response = await request(app)
+      .post("/purchase-intents")
+      .set(authHeader(customer.token))
+      .send({ text: DEMO_LAPTOP_PHRASE, purchaseMode: "manual" });
+
+    expect(response.status).toBe(201);
+    expect(response.body.policyDecision.decision).toBe("REQUIRE_APPROVAL");
+    expect(response.body.policyDecision.reasonCode).toBe(REASON.AMOUNT_ABOVE_APPROVAL_THRESHOLD);
+    expect(response.body.selectedProduct.id).toBe(DEMO_LAPTOP_PRODUCT_ID);
+    expect(response.body.selectedProduct.price).toBe(DEMO_LAPTOP_PRICE);
+    expect(await prisma.order.count({ where: { purchaseIntentId: response.body.id } })).toBe(0);
+
+    const stored = await prisma.purchaseIntent.findUniqueOrThrow({
+      where: { id: response.body.id },
+      include: { policyEvaluations: true },
+    });
+    expect(stored.policyEvaluations[0]?.decision).toBe("REQUIRE_APPROVAL");
+    expect(stored.policyEvaluations[0]?.reasonCode).toBe(REASON.AMOUNT_ABOVE_APPROVAL_THRESHOLD);
   });
 
   it("evaluates a blocked-category request as DENY after ranking, with zero Order rows", async () => {
@@ -310,6 +337,9 @@ describe("POST /purchase-intents", () => {
     });
     expect(stored.order).toBeNull();
     expect(stored.policyEvaluations[0]?.decision).toBe("DENY");
+    expect(
+      await prisma.order.count({ where: { purchaseIntentId: response.body.id } }),
+    ).toBe(0);
   });
 
   it("stops with NO_MATCHING_PRODUCTS and never calls the policy engine", async () => {
@@ -372,5 +402,40 @@ describe("POST /purchase-intents", () => {
       .set(authHeader(stranger.token));
     expect(peek.status).toBe(404);
     expect(peek.body.error).toBe("NOT_FOUND");
+  });
+
+  it("creates two independent purchase_intents when the same text is submitted concurrently", async () => {
+    installIntentFixtures();
+    const customer = await registerCustomer();
+    await putPolicy(customer.token);
+
+    const payload = { text: DEMO_INTENT_PHRASE, purchaseMode: "autonomous" as const };
+    const [first, second] = await Promise.all([
+      request(app).post("/purchase-intents").set(authHeader(customer.token)).send(payload),
+      request(app).post("/purchase-intents").set(authHeader(customer.token)).send(payload),
+    ]);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(first.body.id).not.toBe(second.body.id);
+    expect(first.body.result).toBe(PIPELINE_RESULT.POLICY_ALLOWED);
+    expect(second.body.result).toBe(PIPELINE_RESULT.POLICY_ALLOWED);
+
+    const rows = await prisma.purchaseIntent.findMany({
+      where: { id: { in: [first.body.id, second.body.id] } },
+      include: { agentRun: { include: { decisions: true } }, policyEvaluations: true, order: true },
+    });
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((row) => row.agentRun?.id)).size).toBe(2);
+    for (const row of rows) {
+      expect(row.userId).toBe(customer.user.id);
+      expect(row.rawText).toBe(DEMO_INTENT_PHRASE);
+      expect(row.status).toBe("POLICY_ALLOWED");
+      expect(row.agentRun).not.toBeNull();
+      expect(row.agentRun?.purchaseIntentId).toBe(row.id);
+      expect(row.agentRun?.decisions.filter((decision) => decision.selected)).toHaveLength(1);
+      expect(row.policyEvaluations).toHaveLength(1);
+      expect(row.order).toBeNull();
+    }
   });
 });

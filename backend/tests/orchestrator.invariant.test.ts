@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "fs";
+import { readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
 
@@ -28,6 +28,18 @@ function listTsFiles(dir: string): string[] {
 
 const INTENT_DIR = path.resolve(__dirname, "../src/modules/intent");
 const RANKING_DIR = path.resolve(__dirname, "../src/modules/ranking");
+const BACKEND_ROOT = path.resolve(__dirname, "..");
+
+function paymentsImportViolations(): string[] {
+  const files = [...listTsFiles(INTENT_DIR), ...listTsFiles(RANKING_DIR)];
+  const violations: string[] = [];
+  for (const file of files) {
+    if (sourceImportsPayments(readFileSync(file, "utf8"))) {
+      violations.push(path.relative(BACKEND_ROOT, file));
+    }
+  }
+  return violations;
+}
 
 describe("no-cross-import invariant (PRD Section 13)", () => {
   it("detects a payments import the way a future violating file would", () => {
@@ -39,19 +51,26 @@ describe("no-cross-import invariant (PRD Section 13)", () => {
     expect(sourceImportsPayments('import { rankProducts } from "../ranking/rank";')).toBe(false);
   });
 
-  it("intent and ranking modules never import modules/payments", () => {
-    const files = [...listTsFiles(INTENT_DIR), ...listTsFiles(RANKING_DIR)];
-    expect(files.length).toBeGreaterThan(0);
-
-    const violations: string[] = [];
-    for (const file of files) {
-      const source = readFileSync(file, "utf8");
-      if (sourceImportsPayments(source)) {
-        violations.push(path.relative(path.resolve(__dirname, ".."), file));
+  it("fails when a dummy payments import is added under intent/, then is clean after removal", () => {
+    const dummy = path.join(INTENT_DIR, "__payments-import-probe.ts");
+    try {
+      writeFileSync(dummy, 'import { createOrder } from "../../modules/payments/create-order";\n');
+      const caught = paymentsImportViolations();
+      expect(caught.some((file) => file.endsWith("__payments-import-probe.ts"))).toBe(true);
+    } finally {
+      try {
+        unlinkSync(dummy);
+      } catch {
+        // probe file already removed
       }
     }
 
-    expect(violations).toEqual([]);
+    expect(paymentsImportViolations()).toEqual([]);
+  });
+
+  it("intent and ranking modules never import modules/payments", () => {
+    expect(listTsFiles(INTENT_DIR).length + listTsFiles(RANKING_DIR).length).toBeGreaterThan(0);
+    expect(paymentsImportViolations()).toEqual([]);
   });
 
   it("orchestrator never creates an Order (Phase 13/15)", () => {
