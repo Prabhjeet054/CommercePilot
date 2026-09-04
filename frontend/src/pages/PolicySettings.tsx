@@ -158,6 +158,9 @@ export default function PolicySettingsPage() {
           <h1 className="text-lg font-semibold tracking-tight">Financial policy</h1>
         </div>
         <div className="flex items-center gap-4">
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/shop">Shop</Link>
+          </Button>
           <span className="font-mono text-xs text-muted-foreground">{user?.email}</span>
           <Button type="button" variant="outline" size="sm" onClick={() => void logout()}>
             Sign out

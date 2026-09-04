@@ -2,9 +2,13 @@ import { Link, Route, Routes } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth-context";
+import AICommerceDashboard from "@/pages/AICommerceDashboard";
+import AIShoppingChat from "@/pages/AIShoppingChat";
 import LoginPage from "@/pages/Login";
 import PolicySettingsPage from "@/pages/PolicySettings";
+import ProductComparisonPage from "@/pages/ProductComparison";
 import ProductManagementPage from "@/pages/ProductManagement";
+import PurchaseReviewPage from "@/pages/PurchaseReview";
 import RegisterPage from "@/pages/Register";
 
 function LandingPage() {
@@ -35,9 +39,14 @@ function LandingPage() {
                 </Button>
               )}
               {user.role === "customer" && (
-                <Button asChild variant="outline" size="sm">
-                  <Link to="/policy">Policy</Link>
-                </Button>
+                <>
+                  <Button asChild variant="outline" size="sm">
+                    <Link to="/shop">Shop</Link>
+                  </Button>
+                  <Button asChild variant="outline" size="sm">
+                    <Link to="/policy">Policy</Link>
+                  </Button>
+                </>
               )}
               <span className="font-mono text-xs text-foreground">{user.email}</span>
               <Button type="button" variant="outline" size="sm" onClick={() => void logout()}>
@@ -117,6 +126,38 @@ export default function App() {
         element={
           <ProtectedRoute roles={["customer"]}>
             <PolicySettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shop"
+        element={
+          <ProtectedRoute roles={["customer"]}>
+            <AICommerceDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shop/:intentId"
+        element={
+          <ProtectedRoute roles={["customer"]}>
+            <AIShoppingChat />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shop/:intentId/compare"
+        element={
+          <ProtectedRoute roles={["customer"]}>
+            <ProductComparisonPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shop/:intentId/review"
+        element={
+          <ProtectedRoute roles={["customer"]}>
+            <PurchaseReviewPage />
           </ProtectedRoute>
         }
       />

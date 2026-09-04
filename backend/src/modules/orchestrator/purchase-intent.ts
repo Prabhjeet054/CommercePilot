@@ -1,4 +1,4 @@
-import { Prisma, type AgentDecision, type AgentRun, type PolicyEvaluation, type PurchaseIntent } from "@prisma/client";
+import { Prisma, type AgentRun, type PolicyEvaluation, type PurchaseIntent } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { extractIntent } from "../intent/intent-agent";
 import type { PurchaseMode, StructuredIntent } from "../intent/intent.schema";
@@ -67,11 +67,25 @@ export type PurchaseIntentPipelineResult = {
   policyDecision: PolicyDecisionDto | null;
 };
 
+type DecisionWithProduct = Prisma.AgentDecisionGetPayload<{
+  include: {
+    product: { select: { name: true; price: true; category: true; merchantId: true } };
+  };
+}>;
+
 export type StoredPurchaseIntent = {
   intent: PurchaseIntent;
-  agentRun: (AgentRun & { decisions: AgentDecision[] }) | null;
+  agentRun: (AgentRun & { decisions: DecisionWithProduct[] }) | null;
   policyEvaluations: PolicyEvaluation[];
   orderCount: number;
+};
+
+export type PurchaseIntentListItem = {
+  id: string;
+  rawText: string;
+  status: string;
+  purchaseMode: string;
+  createdAt: string;
 };
 
 function rupees(value: { toString(): string } | number | string): number {
@@ -296,6 +310,22 @@ export async function runPurchaseIntentPipeline(
   };
 }
 
+export async function listPurchaseIntentsForUser(userId: string): Promise<PurchaseIntentListItem[]> {
+  const rows = await prisma.purchaseIntent.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: { id: true, rawText: true, status: true, purchaseMode: true, createdAt: true },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    rawText: row.rawText,
+    status: row.status,
+    purchaseMode: row.purchaseMode,
+    createdAt: row.createdAt.toISOString(),
+  }));
+}
+
 export async function getStoredPurchaseIntent(
   id: string,
   userId: string,
@@ -303,7 +333,16 @@ export async function getStoredPurchaseIntent(
   const intent = await prisma.purchaseIntent.findUnique({
     where: { id },
     include: {
-      agentRun: { include: { decisions: { orderBy: { rank: "asc" } } } },
+      agentRun: {
+        include: {
+          decisions: {
+            orderBy: { rank: "asc" },
+            include: {
+              product: { select: { name: true, price: true, category: true, merchantId: true } },
+            },
+          },
+        },
+      },
       policyEvaluations: { orderBy: { evaluatedAt: "asc" } },
       order: { select: { id: true } },
     },
@@ -340,8 +379,13 @@ export function serializeStoredPurchaseIntent(stored: StoredPurchaseIntent) {
           decisions: stored.agentRun.decisions.map((decision) => ({
             id: decision.id,
             productId: decision.productId,
+            name: decision.product.name,
+            price: decision.product.price.toFixed(2),
+            category: decision.product.category,
+            merchantId: decision.product.merchantId,
             score: decision.score ? decision.score.toFixed(2) : null,
             scoreBreakdown: decision.scoreBreakdown,
+            factors: decision.scoreBreakdown,
             rank: decision.rank,
             selected: decision.selected,
           })),

@@ -11,6 +11,7 @@ import {
 } from "./orchestrator.schema";
 import {
   getStoredPurchaseIntent,
+  listPurchaseIntentsForUser,
   runPurchaseIntentPipeline,
   serializeStoredPurchaseIntent,
 } from "./purchase-intent";
@@ -53,6 +54,17 @@ export async function create(req: Request, res: Response): Promise<void> {
     }
     throw err;
   }
+}
+
+export async function listMine(req: Request, res: Response): Promise<void> {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ error: "UNAUTHORIZED" });
+    return;
+  }
+
+  const intents = await listPurchaseIntentsForUser(userId);
+  res.status(200).json({ intents });
 }
 
 export async function getOne(req: Request, res: Response): Promise<void> {

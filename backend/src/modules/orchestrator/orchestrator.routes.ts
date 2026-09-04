@@ -38,6 +38,12 @@ export function createOrchestratorRouter(): Router {
     wrap(orchestratorController.create),
   );
   router.get(
+    "/purchase-intents",
+    requireAuth,
+    requireRole(["customer"]),
+    wrap(orchestratorController.listMine),
+  );
+  router.get(
     "/purchase-intents/:id",
     requireAuth,
     requireRole(["customer"]),

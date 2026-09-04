@@ -245,6 +245,10 @@ describe("POST /purchase-intents", () => {
     expect(fetched.body.status).toBe("POLICY_ALLOWED");
     expect(fetched.body.orderCount).toBe(0);
     expect(fetched.body.policyEvaluations[0].reasonCode).toBe(REASON.WITHIN_POLICY);
+    expect(fetched.body.agentRun.decisions.find((row: { selected: boolean }) => row.selected).name).toBe(
+      "Apex Stride Runner",
+    );
+    expect(fetched.body.agentRun.decisions[0].factors).toEqual(fetched.body.agentRun.decisions[0].scoreBreakdown);
   });
 
   it("reproduces the PRD laptop demo against the seeded policy: REQUIRE_APPROVAL (daily cap binds first)", async () => {
@@ -402,6 +406,27 @@ describe("POST /purchase-intents", () => {
       .set(authHeader(stranger.token));
     expect(peek.status).toBe(404);
     expect(peek.body.error).toBe("NOT_FOUND");
+  });
+
+  it("lists the caller's purchase intents and not another customer's", async () => {
+    installIntentFixtures();
+    const owner = await registerCustomer();
+    const stranger = await registerCustomer();
+    await putPolicy(owner.token);
+
+    const created = await request(app)
+      .post("/purchase-intents")
+      .set(authHeader(owner.token))
+      .send({ text: DEMO_INTENT_PHRASE, purchaseMode: "autonomous" });
+    expect(created.status).toBe(201);
+
+    const mine = await request(app).get("/purchase-intents").set(authHeader(owner.token));
+    expect(mine.status).toBe(200);
+    expect(mine.body.intents.some((row: { id: string }) => row.id === created.body.id)).toBe(true);
+
+    const theirs = await request(app).get("/purchase-intents").set(authHeader(stranger.token));
+    expect(theirs.status).toBe(200);
+    expect(theirs.body.intents.some((row: { id: string }) => row.id === created.body.id)).toBe(false);
   });
 
   it("creates two independent purchase_intents when the same text is submitted concurrently", async () => {

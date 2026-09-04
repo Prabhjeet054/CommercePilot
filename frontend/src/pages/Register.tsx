@@ -33,7 +33,7 @@ export default function RegisterPage() {
     setServerError(null);
     try {
       const signedIn = await registerAccount(parsed.data);
-      navigate(signedIn.role === "merchant_admin" ? "/products" : "/policy", { replace: true });
+      navigate(signedIn.role === "merchant_admin" ? "/products" : "/shop", { replace: true });
     } catch (error) {
       setServerError(error instanceof Error ? error.message : "Registration failed");
     }
