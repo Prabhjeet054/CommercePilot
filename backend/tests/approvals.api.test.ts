@@ -8,6 +8,7 @@ import { MockLLMProvider } from "../src/lib/providers/mock-provider";
 import { DEMO_LAPTOP_PRICE, DEMO_LAPTOP_PRODUCT_ID } from "../src/modules/catalog/catalog.constants";
 import { buildIntentPrompt } from "../src/modules/intent/intent-agent";
 import type { LlmIntent } from "../src/modules/intent/intent.schema";
+import { decideApproval } from "../src/modules/approvals/approval.service";
 import { DEMO_LAPTOP_PHRASE } from "../src/modules/orchestrator/purchase-intent";
 import { REASON } from "../src/modules/policy/evaluate";
 import { seedCatalog } from "../prisma/seed";
@@ -185,7 +186,7 @@ describe("Approval API", () => {
     expect(stillPending.consumedAt).toBeNull();
   });
 
-  it("returns 409 ALREADY_CONSUMED when approving an already-approved approval", async () => {
+  it("approving a pending approval consumes it and advances the intent to APPROVED", async () => {
     installLaptopFixture();
     const customer = await registerCustomer();
     await putPolicy(customer.token);
@@ -197,6 +198,47 @@ describe("Approval API", () => {
       .send({ decision: "approve" });
     expect(first.status).toBe(200);
     expect(first.body.status).toBe("APPROVED");
+    expect(first.body.consumedAt).toBeTruthy();
+
+    const row = await prisma.approval.findUniqueOrThrow({ where: { id: created.approvalId } });
+    expect(row.status).toBe("APPROVED");
+    expect(row.consumedAt).not.toBeNull();
+
+    const intent = await prisma.purchaseIntent.findUniqueOrThrow({
+      where: { id: created.intentId },
+      include: { order: true, agentRun: true },
+    });
+    expect(intent.status).toBe("APPROVED");
+    expect(intent.order).toBeNull();
+    expect(await prisma.order.count({ where: { purchaseIntentId: created.intentId } })).toBe(0);
+
+    const stored = await request(app)
+      .get(`/purchase-intents/${created.intentId}`)
+      .set(authHeader(customer.token));
+    expect(stored.status).toBe(200);
+    expect(stored.body.status).toBe("APPROVED");
+    expect(stored.body.approval.status).toBe("APPROVED");
+    expect(stored.body.orderCount).toBe(0);
+  });
+
+  it("returns 409 ALREADY_CONSUMED on replay and does not re-trigger downstream effects", async () => {
+    installLaptopFixture();
+    const customer = await registerCustomer();
+    await putPolicy(customer.token);
+    const created = await createLaptopApproval(customer.token);
+
+    const first = await request(app)
+      .post(`/approvals/${created.approvalId}/decision`)
+      .set(authHeader(customer.token))
+      .send({ decision: "approve" });
+    expect(first.status).toBe(200);
+
+    const afterFirst = await prisma.approval.findUniqueOrThrow({ where: { id: created.approvalId } });
+    const intentAfterFirst = await prisma.purchaseIntent.findUniqueOrThrow({
+      where: { id: created.intentId },
+    });
+    expect(afterFirst.consumedAt).not.toBeNull();
+    const consumedAt = afterFirst.consumedAt!.toISOString();
 
     const replay = await request(app)
       .post(`/approvals/${created.approvalId}/decision`)
@@ -211,9 +253,21 @@ describe("Approval API", () => {
       .send({ decision: "reject" });
     expect(rejectReplay.status).toBe(409);
     expect(rejectReplay.body.error).toBe("ALREADY_CONSUMED");
+
+    const afterReplay = await prisma.approval.findUniqueOrThrow({ where: { id: created.approvalId } });
+    expect(afterReplay.status).toBe("APPROVED");
+    expect(afterReplay.consumedAt?.toISOString()).toBe(consumedAt);
+
+    const intentAfterReplay = await prisma.purchaseIntent.findUniqueOrThrow({
+      where: { id: created.intentId },
+    });
+    expect(intentAfterReplay.status).toBe("APPROVED");
+    expect(intentAfterReplay.status).toBe(intentAfterFirst.status);
+    expect(await prisma.order.count({ where: { purchaseIntentId: created.intentId } })).toBe(0);
+    expect(await prisma.approval.count({ where: { purchaseIntentId: created.intentId } })).toBe(1);
   });
 
-  it("returns 409 ALREADY_CONSUMED when deciding an already-rejected approval", async () => {
+  it("rejecting a pending approval marks it REJECTED and halts the pipeline with no Order", async () => {
     installLaptopFixture();
     const customer = await registerCustomer();
     await putPolicy(customer.token);
@@ -226,8 +280,16 @@ describe("Approval API", () => {
     expect(first.status).toBe(200);
     expect(first.body.status).toBe("REJECTED");
 
-    const intent = await prisma.purchaseIntent.findUniqueOrThrow({ where: { id: created.intentId } });
+    const row = await prisma.approval.findUniqueOrThrow({ where: { id: created.approvalId } });
+    expect(row.status).toBe("REJECTED");
+    expect(row.consumedAt).not.toBeNull();
+
+    const intent = await prisma.purchaseIntent.findUniqueOrThrow({
+      where: { id: created.intentId },
+      include: { order: true },
+    });
     expect(intent.status).toBe("APPROVAL_REJECTED");
+    expect(intent.order).toBeNull();
     expect(await prisma.order.count({ where: { purchaseIntentId: created.intentId } })).toBe(0);
 
     const replay = await request(app)
@@ -236,6 +298,11 @@ describe("Approval API", () => {
       .send({ decision: "approve" });
     expect(replay.status).toBe(409);
     expect(replay.body.error).toBe("ALREADY_CONSUMED");
+
+    const afterReplay = await prisma.purchaseIntent.findUniqueOrThrow({ where: { id: created.intentId } });
+    expect(afterReplay.status).toBe("APPROVAL_REJECTED");
+    const approvalAfterReplay = await prisma.approval.findUniqueOrThrow({ where: { id: created.approvalId } });
+    expect(approvalAfterReplay.status).toBe("REJECTED");
   });
 
   it("returns 409 EXPIRED for an expired pending approval", async () => {
@@ -259,6 +326,10 @@ describe("Approval API", () => {
     const row = await prisma.approval.findUniqueOrThrow({ where: { id: created.approvalId } });
     expect(row.status).toBe("EXPIRED");
     expect(row.consumedAt).toBeNull();
+
+    const intent = await prisma.purchaseIntent.findUniqueOrThrow({ where: { id: created.intentId } });
+    expect(intent.status).toBe("APPROVAL_PENDING");
+    expect(await prisma.order.count({ where: { purchaseIntentId: created.intentId } })).toBe(0);
   });
 
   it("two simultaneous approve requests result in exactly one success and one 409", async () => {
@@ -291,8 +362,92 @@ describe("Approval API", () => {
     expect(rows[0]?.status).toBe("APPROVED");
     expect(rows[0]?.consumedAt).not.toBeNull();
 
-    const intent = await prisma.purchaseIntent.findUniqueOrThrow({ where: { id: created.intentId } });
+    const intent = await prisma.purchaseIntent.findUniqueOrThrow({
+      where: { id: created.intentId },
+      include: { order: true, agentRun: true },
+    });
     expect(intent.status).toBe("APPROVED");
+    expect(intent.order).toBeNull();
+    expect(intent.agentRun).not.toBeNull();
     expect(await prisma.order.count({ where: { purchaseIntentId: created.intentId } })).toBe(0);
+    expect(await prisma.agentRun.count({ where: { purchaseIntentId: created.intentId } })).toBe(1);
+  });
+
+  it("conflicting simultaneous decideApproval calls: exactly one wins across 5 iterations", async () => {
+    installLaptopFixture();
+    const customer = await registerCustomer();
+    await putPolicy(customer.token);
+
+    for (let iteration = 0; iteration < 5; iteration += 1) {
+      const created = await createLaptopApproval(customer.token);
+      const beforeRuns = await prisma.agentRun.count({ where: { purchaseIntentId: created.intentId } });
+
+      const [approve, reject] = await Promise.all([
+        request(app)
+          .post(`/approvals/${created.approvalId}/decision`)
+          .set(authHeader(customer.token))
+          .send({ decision: "approve" }),
+        request(app)
+          .post(`/approvals/${created.approvalId}/decision`)
+          .set(authHeader(customer.token))
+          .send({ decision: "reject" }),
+      ]);
+
+      const statuses = [approve.status, reject.status].sort();
+      expect(statuses, `iteration ${iteration}`).toEqual([200, 409]);
+
+      const winner = approve.status === 200 ? approve : reject;
+      const loser = approve.status === 409 ? approve : reject;
+      expect(loser.body.error).toBe("ALREADY_CONSUMED");
+      expect(["APPROVED", "REJECTED"]).toContain(winner.body.status);
+
+      const rows = await prisma.approval.findMany({ where: { id: created.approvalId } });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.consumedAt).not.toBeNull();
+      expect(rows[0]?.status).toBe(winner.body.status);
+
+      const intent = await prisma.purchaseIntent.findUniqueOrThrow({
+        where: { id: created.intentId },
+        include: { order: true, agentRun: true, approval: true },
+      });
+      const expectedIntent = winner.body.status === "APPROVED" ? "APPROVED" : "APPROVAL_REJECTED";
+      expect(intent.status).toBe(expectedIntent);
+      expect(intent.order).toBeNull();
+      expect(intent.approval?.id).toBe(created.approvalId);
+      expect(await prisma.order.count({ where: { purchaseIntentId: created.intentId } })).toBe(0);
+      expect(await prisma.approval.count({ where: { purchaseIntentId: created.intentId } })).toBe(1);
+      expect(await prisma.agentRun.count({ where: { purchaseIntentId: created.intentId } })).toBe(beforeRuns);
+    }
+  });
+
+  it("direct decideApproval races with conflicting decisions: exactly one ok across 5 iterations", async () => {
+    installLaptopFixture();
+    const customer = await registerCustomer();
+    await putPolicy(customer.token);
+
+    for (let iteration = 0; iteration < 5; iteration += 1) {
+      const created = await createLaptopApproval(customer.token);
+
+      const [approve, reject] = await Promise.all([
+        decideApproval(created.approvalId, customer.user.id, "approve"),
+        decideApproval(created.approvalId, customer.user.id, "reject"),
+      ]);
+
+      const wins = [approve, reject].filter((row) => row.ok);
+      const losses = [approve, reject].filter((row) => !row.ok);
+      expect(wins, `iteration ${iteration}`).toHaveLength(1);
+      expect(losses).toHaveLength(1);
+      expect(losses[0]).toEqual({ ok: false, reason: "ALREADY_CONSUMED" });
+
+      const row = await prisma.approval.findUniqueOrThrow({ where: { id: created.approvalId } });
+      expect(row.consumedAt).not.toBeNull();
+      const expectedApproval = approve.ok ? "APPROVED" : "REJECTED";
+      expect(row.status).toBe(expectedApproval);
+
+      const intent = await prisma.purchaseIntent.findUniqueOrThrow({ where: { id: created.intentId } });
+      expect(intent.status).toBe(approve.ok ? "APPROVED" : "APPROVAL_REJECTED");
+      expect(await prisma.order.count({ where: { purchaseIntentId: created.intentId } })).toBe(0);
+      expect(await prisma.approval.count({ where: { purchaseIntentId: created.intentId } })).toBe(1);
+    }
   });
 });
