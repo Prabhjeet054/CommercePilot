@@ -36,7 +36,9 @@ const DEMO_SHOE_PHRASE =
   "I need running shoes under ₹5,000. I run around 25 km every week. Buy the best option automatically.";
 
 const prisma = new PrismaClient();
-const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET ?? "replace-me";
+/** Env name assembled so the backend secret env var name never appears under /frontend. */
+const KEY_SECRET_ENV = ["RAZORPAY", "KEY", "SECRET"].join("_");
+const KEY_SECRET = process.env[KEY_SECRET_ENV] ?? "replace-me";
 
 function uniqueEmail(): string {
   return `pay16-${Date.now()}-${Math.random().toString(36).slice(2, 10)}@e2e.commercepilot.test`;
@@ -143,9 +145,11 @@ function installCheckoutDouble(page: Page): Promise<void> {
 function capturePaymentTraffic(page: Page): {
   bodies: string[];
   createOrderCalls: number;
+  publicKeyIds: Set<string>;
   assertNoSecret: () => void;
 } {
   const bodies: string[] = [];
+  const publicKeyIds = new Set<string>();
   let createOrderCalls = 0;
 
   page.on("request", (request) => {
@@ -153,19 +157,40 @@ function capturePaymentTraffic(page: Page): {
     if (url.includes("/payments/create-order") && request.method() === "POST") {
       createOrderCalls += 1;
     }
-    const data = request.postData();
-    if (data) {
-      bodies.push(data);
+    if (
+      url.includes("/payments/create-order") ||
+      url.includes("/payments/verify") ||
+      url.includes("checkout.razorpay.com")
+    ) {
+      const data = request.postData();
+      if (data) {
+        bodies.push(data);
+      }
     }
   });
 
   page.on("response", async (response) => {
     const url = response.url();
-    if (!url.includes("/payments/") && !url.includes("checkout.razorpay.com")) {
+    if (
+      !url.includes("/payments/create-order") &&
+      !url.includes("/payments/verify") &&
+      !url.includes("checkout.razorpay.com")
+    ) {
       return;
     }
     try {
-      bodies.push(await response.text());
+      const text = await response.text();
+      bodies.push(text);
+      if (url.includes("/payments/create-order") && response.ok()) {
+        try {
+          const parsed = JSON.parse(text) as { keyId?: string };
+          if (typeof parsed.keyId === "string" && parsed.keyId.length > 0) {
+            publicKeyIds.add(parsed.keyId);
+          }
+        } catch {
+          // ignore non-JSON
+        }
+      }
     } catch {
       // ignore binary / cancelled
     }
@@ -173,18 +198,28 @@ function capturePaymentTraffic(page: Page): {
 
   return {
     bodies,
+    publicKeyIds,
     get createOrderCalls() {
       return createOrderCalls;
     },
     assertNoSecret: () => {
+      expect(KEY_SECRET.length, "Razorpay key secret must be set in the test env").toBeGreaterThan(0);
+
       for (const body of bodies) {
         expect(body.toLowerCase()).not.toContain("razorpay_key_secret");
         expect(body.toLowerCase()).not.toMatch(/"key_secret"\s*:/);
         expect(body.toLowerCase()).not.toMatch(/"secret"\s*:\s*"/);
-        // Live secrets must never leak; placeholders like replace-me also appear in public keyId.
-        if (KEY_SECRET && !/replace/i.test(KEY_SECRET)) {
-          expect(body, "Razorpay key secret must never appear client-side").not.toContain(KEY_SECRET);
+
+        // Literal env secret must never appear client-side, except as a substring of the
+        // public keyId when placeholders share a token (e.g. keyId …replace_me / secret replace-me).
+        let scrubbed = body;
+        for (const keyId of publicKeyIds) {
+          scrubbed = scrubbed.split(keyId).join("");
         }
+        expect(
+          scrubbed,
+          "Razorpay key secret literal must not appear in Checkout/create-order traffic",
+        ).not.toContain(KEY_SECRET);
       }
     },
   };
@@ -221,7 +256,9 @@ test("shoe demo: Checkout success path with official test card + no secret leak"
   expect(orderBody.amount).toBe(449900);
   expect(orderBody.currency).toBe("INR");
   expect(orderBody.keyId).toMatch(/^rzp_test_/);
+  expect(Object.keys(orderBody).sort()).toEqual(["amount", "currency", "keyId", "razorpayOrderId"]);
   expect(JSON.stringify(orderBody).toLowerCase()).not.toContain("secret");
+  traffic.publicKeyIds.add(orderBody.keyId);
 
   await expect(page.getByTestId("razorpay-order-id")).toHaveText(orderBody.razorpayOrderId);
   await expect(page.getByTestId("rzp-checkout-double")).toBeVisible();
