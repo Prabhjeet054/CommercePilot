@@ -177,18 +177,27 @@ export async function createRazorpayOrderForPurchaseIntent(
     throw new RazorpayApiError("Razorpay Orders API failed", { cause: err });
   }
 
-  const internal = await createInternalOrder({
-    purchaseIntentId: intent.id,
-    productId: selected.product.id,
-    amount: rupees,
-    razorpayOrderId: created.id,
-  });
+  try {
+    const internal = await createInternalOrder({
+      purchaseIntentId: intent.id,
+      productId: selected.product.id,
+      amount: rupees,
+      razorpayOrderId: created.id,
+    });
 
-  if (!internal.razorpayOrderId) {
-    throw new RazorpayApiError("Internal order persisted without razorpayOrderId");
+    if (!internal.razorpayOrderId) {
+      throw new RazorpayApiError("Internal order persisted without razorpayOrderId");
+    }
+
+    return toCreateOrderResult(internal, internal.razorpayOrderId);
+  } catch (err) {
+    // Concurrent create-order: another request won the race — reuse its row.
+    const existing = await prisma.order.findUnique({ where: { purchaseIntentId: intent.id } });
+    if (existing?.razorpayOrderId) {
+      return createRazorpayOrder(existing.id, client);
+    }
+    throw err;
   }
-
-  return toCreateOrderResult(internal, internal.razorpayOrderId);
 }
 
 export { RazorpayApiError };

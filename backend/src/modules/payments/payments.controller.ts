@@ -6,7 +6,7 @@ import {
   RazorpayApiError,
 } from "./create-order";
 import { RazorpayConfigError } from "./razorpay-client";
-import { createOrderBodySchema, fieldErrors } from "./payments.schema";
+import { createOrderBodySchema, fieldErrors, verifyPaymentBodySchema } from "./payments.schema";
 
 export async function createOrder(req: Request, res: Response): Promise<void> {
   const userId = req.user?.id;
@@ -43,4 +43,31 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
     }
     throw err;
   }
+}
+
+/**
+ * Phase 16 stub — Phase 17 replaces this with HMAC verification.
+ * Accepts the Checkout handler payload and returns a provisional pending state.
+ */
+export async function verifyPaymentStub(req: Request, res: Response): Promise<void> {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ error: "UNAUTHORIZED" });
+    return;
+  }
+
+  const parsed = verifyPaymentBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "VALIDATION_ERROR", fields: fieldErrors(parsed.error) });
+    return;
+  }
+
+  res.status(501).json({
+    verified: false,
+    status: "VERIFICATION_PENDING",
+    orderState: "ORDER_CREATED",
+    message: "Payment received. Server verification lands in Phase 17.",
+    razorpay_order_id: parsed.data.razorpay_order_id,
+    razorpay_payment_id: parsed.data.razorpay_payment_id,
+  });
 }

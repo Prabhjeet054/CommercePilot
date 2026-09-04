@@ -40,7 +40,8 @@ test("demo phrase selects the ₹4,499 shoe and shows an allowed autonomous resu
   await expect(page.getByTestId("top-pick-name")).toHaveText("Apex Stride Runner");
   await expect(page.getByText(/₹4,499/).first()).toBeVisible();
   await expect(page.getByText("ALLOW · WITHIN_POLICY")).toBeVisible();
-  await expect(page.getByText(/continuing automatically/i)).toBeVisible();
+  await expect(page.getByText(/continue to payment when you are ready/i)).toBeVisible();
+  await expect(page.getByTestId("continue-to-payment")).toBeVisible();
   await expect(page.getByText(/policy allowed this purchase/i)).toBeVisible();
 
   await page.getByRole("link", { name: "Open comparison" }).click();

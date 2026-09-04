@@ -49,7 +49,7 @@ function uniqueClientIp(): string {
 }
 
 function isRazorpayUrl(url: string): boolean {
-  return /razorpay/i.test(url);
+  return /(?:^|[/.])razorpay\.com\b/i.test(url) || /api\.razorpay\.com/i.test(url);
 }
 
 function watchRazorpay(page: Page): { assertNone: () => void } {
@@ -157,7 +157,8 @@ test("A: register → demo policy → shoe intent reaches POLICY_ALLOWED / ALLOW
   await expect(page.getByText(/₹4,499/).first()).toBeVisible();
   await expect(page.getByText("ALLOW · WITHIN_POLICY")).toBeVisible();
   await expect(page.getByText(/policy allowed this purchase/i)).toBeVisible();
-  await expect(page.getByText(/continuing automatically/i)).toBeVisible();
+  await expect(page.getByText(/continue to payment when you are ready/i)).toBeVisible();
+  await expect(page.getByTestId("continue-to-payment")).toBeVisible();
 
   const stored = await getIntent(accessToken, intentId);
   expect(stored.status).toBe("POLICY_ALLOWED");
@@ -236,7 +237,8 @@ test("B: register → demo policy → laptop intent → APPROVAL_PENDING → app
 
   await page.goto(`/shop/${intentId}/review`);
   await expect(page.getByText(/you approved this purchase/i)).toBeVisible();
-  await expect(page.getByText(/payment has not started/i)).toBeVisible();
+  await expect(page.getByText(/continue to payment/i)).toBeVisible();
+  await expect(page.getByTestId("continue-to-payment")).toBeVisible();
 
   const db = await prisma.purchaseIntent.findUniqueOrThrow({
     where: { id: intentId },

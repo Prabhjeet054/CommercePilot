@@ -1,12 +1,26 @@
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CustomerShell } from "@/components/CustomerShell";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import {
   formatPrice,
   getPurchaseIntent,
   type PurchaseIntentView,
 } from "@/lib/api/purchase-intents";
+
+function canStartPayment(view: PurchaseIntentView): boolean {
+  if (view.status === "POLICY_ALLOWED" || view.status === "APPROVED" || view.status === "ORDER_CREATED") {
+    return true;
+  }
+  if (view.result === "POLICY_ALLOWED") {
+    return true;
+  }
+  if (view.approval?.status === "APPROVED") {
+    return true;
+  }
+  return false;
+}
 
 export function PurchaseReviewSummary({ view }: { view: PurchaseIntentView }) {
   const product = view.selectedProduct;
@@ -16,6 +30,7 @@ export function PurchaseReviewSummary({ view }: { view: PurchaseIntentView }) {
   const needsApproval =
     policy?.decision === "REQUIRE_APPROVAL" || view.result === "APPROVAL_PENDING";
   const denied = policy?.decision === "DENY" || view.result === "POLICY_DENIED";
+  const payable = canStartPayment(view);
 
   return (
     <div className="space-y-4 rounded-lg border border-border bg-card p-6">
@@ -41,12 +56,12 @@ export function PurchaseReviewSummary({ view }: { view: PurchaseIntentView }) {
 
       {allowed && autonomous && (
         <p className="text-sm text-status-completed">
-          Policy allowed this purchase. Continuing automatically — payment is not started in this step.
+          Policy allowed this purchase. Continue to payment when you are ready.
         </p>
       )}
       {allowed && !autonomous && (
         <p className="text-sm text-status-completed">
-          Policy allowed this purchase. Review the summary above; payment is not started in this step.
+          Policy allowed this purchase. Review the summary above, then continue to payment.
         </p>
       )}
       {needsApproval && view.approval?.status === "PENDING" && (
@@ -66,7 +81,7 @@ export function PurchaseReviewSummary({ view }: { view: PurchaseIntentView }) {
         </div>
       )}
       {view.approval?.status === "APPROVED" && (
-        <p className="text-sm text-status-completed">You approved this purchase. Payment has not started.</p>
+        <p className="text-sm text-status-completed">You approved this purchase. Continue to payment.</p>
       )}
       {(view.approval?.status === "REJECTED" || view.status === "APPROVAL_REJECTED") && (
         <p className="text-sm text-status-denied">You rejected this purchase. No order was created.</p>
@@ -75,6 +90,14 @@ export function PurchaseReviewSummary({ view }: { view: PurchaseIntentView }) {
         <p className="text-sm text-status-denied">
           Policy denied this purchase. No order was created.
         </p>
+      )}
+
+      {payable && (
+        <Button asChild size="lg">
+          <Link to={`/shop/${view.id}/pay`} data-testid="continue-to-payment">
+            Pay Now
+          </Link>
+        </Button>
       )}
     </div>
   );

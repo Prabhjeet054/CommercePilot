@@ -151,7 +151,7 @@ describe("AI shopping chat demo phrase", () => {
     await user.click(screen.getByRole("button", { name: "Apex Stride Runner" }));
     expect(screen.getByText(PRICE_EVIDENCE)).toBeTruthy();
     expect(screen.getByText(QUALITY_EVIDENCE)).toBeTruthy();
-    expect(screen.getByText(/continuing automatically/i)).toBeTruthy();
+    expect(screen.getByText(/continue to payment when you are ready/i)).toBeTruthy();
     expect(screen.getByText(/intent extracted/i)).toBeTruthy();
     expect(screen.getAllByText(/products found/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/ranking/i).length).toBeGreaterThan(0);

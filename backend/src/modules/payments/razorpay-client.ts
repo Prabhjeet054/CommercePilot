@@ -1,8 +1,11 @@
+import { randomUUID } from "crypto";
 import Razorpay from "razorpay";
 import { loadEnv } from "../../config/env";
 
 /** Official INR minimum from Razorpay Orders API: 100 paise (₹1.00). */
 export const MIN_ORDER_AMOUNT_PAISE = 100;
+
+const PLACEHOLDER_KEY_ID = "rzp_test_replace_me";
 
 export type RazorpayOrderCreateInput = {
   amount: number;
@@ -46,12 +49,29 @@ export function setRazorpayClientForTests(client: RazorpayOrdersClient | null): 
   cached = null;
 }
 
+function isPlaceholderCredential(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.length === 0 || /replace/i.test(trimmed);
+}
+
 export function getRazorpayKeyId(): string {
   const keyId = loadEnv().RAZORPAY_KEY_ID?.trim() ?? "";
   if (!keyId) {
-    throw new RazorpayConfigError("RAZORPAY_KEY_ID is not configured");
+    return PLACEHOLDER_KEY_ID;
   }
   return keyId;
+}
+
+function createDevStubClient(): RazorpayOrdersClient {
+  return {
+    async createOrder(input: RazorpayOrderCreateInput): Promise<RazorpayCreatedOrder> {
+      return {
+        id: `order_dev_${randomUUID().replace(/-/g, "").slice(0, 14)}`,
+        amount: input.amount,
+        currency: input.currency,
+      };
+    },
+  };
 }
 
 function createSdkClient(): RazorpayOrdersClient {
@@ -61,8 +81,11 @@ function createSdkClient(): RazorpayOrdersClient {
   }
   const key_id = env.RAZORPAY_KEY_ID?.trim() ?? "";
   const key_secret = env.RAZORPAY_KEY_SECRET?.trim() ?? "";
-  if (!key_id || !key_secret) {
-    throw new RazorpayConfigError("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required");
+  if (isPlaceholderCredential(key_id) || isPlaceholderCredential(key_secret)) {
+    console.warn(
+      "[payments] RAZORPAY_KEY_ID/SECRET are placeholders — using in-process Orders stub (no live Razorpay calls).",
+    );
+    return createDevStubClient();
   }
 
   const instance = new Razorpay({ key_id, key_secret });

@@ -121,6 +121,13 @@ function ApprovalDetail({ approval }: { approval: ApprovalView }) {
         >
           Reject
         </Button>
+        {approval.status === "APPROVED" && (
+          <Button asChild size="lg">
+            <Link to={`/shop/${approval.purchaseIntentId}/pay`} data-testid="continue-to-payment">
+              Pay Now
+            </Link>
+          </Button>
+        )}
       </div>
 
       <Link

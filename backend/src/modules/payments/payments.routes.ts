@@ -20,5 +20,12 @@ export function createPaymentsRouter(): Router {
     wrap(paymentsController.createOrder),
   );
 
+  router.post(
+    "/payments/verify",
+    requireAuth,
+    requireRole(["customer"]),
+    wrap(paymentsController.verifyPaymentStub),
+  );
+
   return router;
 }
