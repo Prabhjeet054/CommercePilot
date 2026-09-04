@@ -3,6 +3,11 @@ import { formatInr } from "@/lib/policy-schema";
 export const DEMO_INTENT_PHRASE =
   "I need running shoes under ₹5,000. I run around 25 km every week. Buy the best option automatically.";
 
+export const DEMO_LAPTOP_PHRASE = "Buy me a laptop for ₹1,20,000";
+
+/** Budget below every seeded Sports price — used to force NO_MATCHING_PRODUCTS. */
+export const LOW_BUDGET_SPORTS_PHRASE = "I want running shoes under ₹50";
+
 export type AuthFetch = (path: string, init?: RequestInit) => Promise<Response>;
 
 export type RankingFactor = {

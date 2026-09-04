@@ -1,5 +1,6 @@
 import { loadEnv, type Env } from "../config/env";
 import type { LLMProvider } from "./llm-provider";
+import { demoIntentFixtures } from "./providers/demo-intent-fixtures";
 import { MockLLMProvider } from "./providers/mock-provider";
 import { RealLLMProvider } from "./providers/real-provider";
 
@@ -17,7 +18,10 @@ export function shouldUseMockProvider(env: LLMEnv): boolean {
 
 export function createLLMProvider(env: LLMEnv): LLMProvider {
   if (shouldUseMockProvider(env)) {
-    return new MockLLMProvider();
+    if (env.NODE_ENV === "test") {
+      return new MockLLMProvider();
+    }
+    return new MockLLMProvider({ fixtures: demoIntentFixtures() });
   }
   return RealLLMProvider.fromEnv(env);
 }

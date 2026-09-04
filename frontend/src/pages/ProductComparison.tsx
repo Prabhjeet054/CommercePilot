@@ -42,6 +42,7 @@ export function RankedCandidatesTable({ candidates }: { candidates: RankedCandid
                         type="button"
                         className="text-left hover:underline"
                         aria-expanded={expanded}
+                        data-testid={row.selected ? "top-pick-name" : undefined}
                         onClick={() => setOpenId(expanded ? null : row.productId)}
                       >
                         {row.name}
@@ -49,7 +50,9 @@ export function RankedCandidatesTable({ candidates }: { candidates: RankedCandid
                       <p className="font-mono text-[11px] text-muted-foreground">{row.category}</p>
                     </td>
                     <td className="px-3 py-2 font-mono tabular-nums">{formatPrice(row.price)}</td>
-                    <td className="px-3 py-2 font-mono tabular-nums">{row.score.toFixed(2)}</td>
+                    <td className="px-3 py-2 font-mono tabular-nums" data-testid={row.selected ? "top-pick-score" : undefined}>
+                      {row.score.toFixed(2)}
+                    </td>
                     <td className="px-3 py-2 font-mono text-[11px] uppercase tracking-wide">
                       {row.selected ? "Selected" : "—"}
                     </td>
@@ -64,7 +67,11 @@ export function RankedCandidatesTable({ candidates }: { candidates: RankedCandid
                           {row.factors.map((factor) => (
                             <li key={`${row.productId}-${factor.name}`}>
                               <p className="font-mono text-xs text-foreground">
-                                {factor.name} · {factor.score.toFixed(2)} × {factor.weight}
+                                {factor.name} ·{" "}
+                                <span data-testid={`factor-score-${row.productId}-${factor.name}`}>
+                                  {factor.score.toFixed(2)}
+                                </span>{" "}
+                                × {factor.weight}
                               </p>
                               <p
                                 data-testid={`evidence-${row.productId}-${factor.name}`}

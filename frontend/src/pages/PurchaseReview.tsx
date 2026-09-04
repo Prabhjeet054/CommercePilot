@@ -50,9 +50,14 @@ export function PurchaseReviewSummary({ view }: { view: PurchaseIntentView }) {
         </p>
       )}
       {needsApproval && (
-        <p className="text-sm text-status-pending">
-          This amount needs your approval before any payment can start. Razorpay has not been called.
-        </p>
+        <div className="space-y-2">
+          <p data-testid="approval-required" className="text-sm font-medium text-status-pending">
+            Approval required
+          </p>
+          <p className="text-sm text-status-pending">
+            This amount needs your approval before any payment can start. Razorpay has not been called.
+          </p>
+        </div>
       )}
       {denied && (
         <p className="text-sm text-status-denied">
