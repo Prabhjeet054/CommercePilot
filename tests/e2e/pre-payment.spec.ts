@@ -1,0 +1,1 @@
+../../frontend/e2e/pre-payment.spec.ts
