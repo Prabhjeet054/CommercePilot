@@ -62,6 +62,14 @@ export function getRazorpayKeyId(): string {
   return keyId;
 }
 
+export function getRazorpayKeySecret(): string {
+  const secret = loadEnv().RAZORPAY_KEY_SECRET?.trim() ?? "";
+  if (!secret) {
+    throw new RazorpayConfigError("RAZORPAY_KEY_SECRET is not configured");
+  }
+  return secret;
+}
+
 function createDevStubClient(): RazorpayOrdersClient {
   return {
     async createOrder(input: RazorpayOrderCreateInput): Promise<RazorpayCreatedOrder> {

@@ -18,18 +18,28 @@ export type VerifyPaymentResponse = {
   orderState?: string;
   status?: string;
   error?: string;
+  reasonCode?: string;
   message?: string;
 };
 
 export class PaymentsApiError extends Error {
   readonly code: string;
   readonly status: number;
+  readonly reasonCode?: string;
+  readonly orderState?: string;
 
-  constructor(code: string, message: string, status: number) {
+  constructor(
+    code: string,
+    message: string,
+    status: number,
+    extras?: { reasonCode?: string; orderState?: string },
+  ) {
     super(message);
     this.name = "PaymentsApiError";
     this.code = code;
     this.status = status;
+    this.reasonCode = extras?.reasonCode;
+    this.orderState = extras?.orderState;
   }
 }
 
@@ -71,10 +81,7 @@ export async function createPaymentOrder(
   };
 }
 
-/**
- * Phase 16 stub call — Phase 17 will perform real HMAC verification.
- * Treats 501 / VERIFICATION_PENDING as a graceful provisional success.
- */
+/** Phase 17 — server HMAC verification of the Checkout handler payload. */
 export async function verifyPayment(
   authFetch: AuthFetch,
   input: VerifyPaymentInput,
@@ -86,23 +93,18 @@ export async function verifyPayment(
   });
   const body = await readBody(response);
 
-  if (response.status === 501 || body.status === "VERIFICATION_PENDING") {
-    return {
-      verified: false,
-      status: "VERIFICATION_PENDING",
-      message:
-        typeof body.message === "string"
-          ? body.message
-          : "Payment received. Server verification lands in Phase 17.",
-      orderState: typeof body.orderState === "string" ? body.orderState : undefined,
-    };
-  }
-
   if (!response.ok) {
     const code = typeof body.error === "string" ? body.error : "VERIFY_FAILED";
     const message =
-      typeof body.message === "string" ? body.message : "Could not verify that payment yet.";
-    throw new PaymentsApiError(code, message, response.status);
+      typeof body.message === "string"
+        ? body.message
+        : code === "SIGNATURE_MISMATCH"
+          ? "Payment signature could not be verified."
+          : "Could not verify that payment.";
+    throw new PaymentsApiError(code, message, response.status, {
+      reasonCode: typeof body.reasonCode === "string" ? body.reasonCode : undefined,
+      orderState: typeof body.orderState === "string" ? body.orderState : undefined,
+    });
   }
 
   return {

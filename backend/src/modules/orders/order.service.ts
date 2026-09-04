@@ -1,5 +1,10 @@
 import { Prisma } from "@prisma/client";
-import { applyPurchaseIntentEvent, transition, type OrderState } from "../../lib/state-machine";
+import {
+  applyPurchaseIntentEvent,
+  transition,
+  type OrderEvent,
+  type OrderState,
+} from "../../lib/state-machine";
 import { prisma } from "../../lib/prisma";
 
 export type CreateInternalOrderInput = {
@@ -69,4 +74,26 @@ export async function createInternalOrder(input: CreateInternalOrderInput): Prom
   });
 
   return serializeOrder(order);
+}
+
+/**
+ * Applies a lifecycle event to both `orders.state` and `purchase_intents.status`.
+ * This is the only place outside createInternalOrder that may write `orders.state`.
+ */
+export async function applyOrderLifecycleEvent(
+  orderId: string,
+  event: OrderEvent,
+): Promise<OrderState> {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUniqueOrThrow({
+      where: { id: orderId },
+      select: { id: true, purchaseIntentId: true, state: true },
+    });
+    // Keep intent + order aligned: intent status is the state-machine source of truth.
+    const next = await applyPurchaseIntentEvent(order.purchaseIntentId, event, tx);
+    if (order.state !== next) {
+      await tx.order.update({ where: { id: orderId }, data: { state: next } });
+    }
+    return next;
+  });
 }

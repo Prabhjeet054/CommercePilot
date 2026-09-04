@@ -7,6 +7,12 @@ import {
 } from "./create-order";
 import { RazorpayConfigError } from "./razorpay-client";
 import { createOrderBodySchema, fieldErrors, verifyPaymentBodySchema } from "./payments.schema";
+import {
+  PaymentSignatureMismatchError,
+  PaymentVerifyConflictError,
+  PaymentVerifyNotFoundError,
+  verifyCheckoutPayment,
+} from "./verify";
 
 export async function createOrder(req: Request, res: Response): Promise<void> {
   const userId = req.user?.id;
@@ -45,11 +51,7 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
   }
 }
 
-/**
- * Phase 16 stub — Phase 17 replaces this with HMAC verification.
- * Accepts the Checkout handler payload and returns a provisional pending state.
- */
-export async function verifyPaymentStub(req: Request, res: Response): Promise<void> {
+export async function verifyPayment(req: Request, res: Response): Promise<void> {
   const userId = req.user?.id;
   if (!userId) {
     res.status(401).json({ error: "UNAUTHORIZED" });
@@ -62,12 +64,40 @@ export async function verifyPaymentStub(req: Request, res: Response): Promise<vo
     return;
   }
 
-  res.status(501).json({
-    verified: false,
-    status: "VERIFICATION_PENDING",
-    orderState: "ORDER_CREATED",
-    message: "Payment received. Server verification lands in Phase 17.",
-    razorpay_order_id: parsed.data.razorpay_order_id,
-    razorpay_payment_id: parsed.data.razorpay_payment_id,
-  });
+  try {
+    const result = await verifyCheckoutPayment({
+      userId,
+      razorpayOrderId: parsed.data.razorpay_order_id,
+      razorpayPaymentId: parsed.data.razorpay_payment_id,
+      razorpaySignature: parsed.data.razorpay_signature,
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    if (err instanceof PaymentVerifyNotFoundError) {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+    if (err instanceof PaymentSignatureMismatchError) {
+      res.status(409).json({
+        error: "SIGNATURE_MISMATCH",
+        reasonCode: "SIGNATURE_MISMATCH",
+        verified: false,
+        orderState: "PAYMENT_VERIFICATION_FAILED",
+        message: "Payment signature could not be verified.",
+      });
+      return;
+    }
+    if (err instanceof PaymentVerifyConflictError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
+    if (err instanceof RazorpayConfigError) {
+      res.status(503).json({
+        error: "RAZORPAY_NOT_CONFIGURED",
+        message: "Razorpay is not configured for signature verification.",
+      });
+      return;
+    }
+    throw err;
+  }
 }

@@ -22,8 +22,8 @@ type UiState =
   | { kind: "checkout_open" }
   | { kind: "dismissed" }
   | { kind: "verifying"; payment: RazorpayCheckoutSuccess }
-  | { kind: "verification_pending"; payment: RazorpayCheckoutSuccess; message: string }
-  | { kind: "verify_error"; message: string };
+  | { kind: "authorized"; payment: RazorpayCheckoutSuccess; orderState: string }
+  | { kind: "verify_error"; message: string; reasonCode?: string };
 
 function formatPaise(amountInPaise: number, currency: string): string {
   if (currency === "INR") {
@@ -89,19 +89,28 @@ export default function PaymentScreen() {
               setUi({ kind: "verifying", payment: response });
               try {
                 const result = await verifyPayment(authFetch, response);
+                if (result.verified) {
+                  setUi({
+                    kind: "authorized",
+                    payment: response,
+                    orderState: result.orderState ?? "PAYMENT_AUTHORIZED",
+                  });
+                  return;
+                }
                 setUi({
-                  kind: "verification_pending",
-                  payment: response,
-                  message:
-                    result.message ??
-                    "Payment received. Server verification lands in Phase 17.",
+                  kind: "verify_error",
+                  message: result.message ?? "Payment could not be verified yet.",
                 });
               } catch (err) {
                 const message =
                   err instanceof PaymentsApiError
                     ? err.message
-                    : "Payment captured in Checkout, but verification is not ready yet.";
-                setUi({ kind: "verify_error", message });
+                    : "Payment captured in Checkout, but verification failed.";
+                setUi({
+                  kind: "verify_error",
+                  message,
+                  reasonCode: err instanceof PaymentsApiError ? err.reasonCode : undefined,
+                });
               }
             })();
           },
@@ -215,19 +224,24 @@ export default function PaymentScreen() {
             </p>
           )}
 
-          {ui.kind === "verification_pending" && (
+          {ui.kind === "authorized" && (
             <div className="space-y-3" data-testid="payment-provisional-success">
-              <p className="text-sm text-status-completed">Payment received in Checkout.</p>
-              <p className="text-sm text-muted-foreground">{ui.message}</p>
-              <p className="font-mono text-xs text-muted-foreground">
-                payment {ui.payment.razorpay_payment_id}
+              <p className="text-sm text-status-completed">Payment authorized.</p>
+              <p className="text-sm text-muted-foreground">
+                Signature verified. Capture / completion lands with the Razorpay webhook (Phase 18).
+              </p>
+              <p className="font-mono text-xs text-muted-foreground" data-testid="payment-order-state">
+                {ui.orderState} · payment {ui.payment.razorpay_payment_id}
               </p>
             </div>
           )}
 
           {ui.kind === "verify_error" && (
-            <div className="space-y-3">
-              <p className="text-sm text-status-pending">{ui.message}</p>
+            <div className="space-y-3" data-testid="payment-verify-error">
+              <p className="text-sm text-status-denied">{ui.message}</p>
+              {ui.reasonCode && (
+                <p className="font-mono text-xs text-muted-foreground">{ui.reasonCode}</p>
+              )}
               {order && (
                 <Button type="button" size="lg" onClick={() => void launchCheckout(order)}>
                   Retry payment

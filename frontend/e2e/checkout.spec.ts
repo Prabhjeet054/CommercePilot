@@ -14,6 +14,7 @@
  * rzp_test_ keys, remove the route mock to drive the live iframe.
  */
 import { createRequire } from "module";
+import { createHmac } from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 import { expect, test, type Page, type Route } from "@playwright/test";
@@ -83,8 +84,14 @@ async function saveDemoPolicy(page: Page): Promise<void> {
   await page.waitForURL(/\/shop/);
 }
 
-function installCheckoutDouble(page: Page): Promise<void> {
-  return page.route("https://checkout.razorpay.com/v1/checkout.js", async (route: Route) => {
+async function installCheckoutDouble(page: Page): Promise<void> {
+  await page.exposeFunction(
+    "commercepilotSignPayment",
+    (orderId: string, paymentId: string) =>
+      createHmac("sha256", KEY_SECRET).update(`${orderId}|${paymentId}`).digest("hex"),
+  );
+
+  await page.route("https://checkout.razorpay.com/v1/checkout.js", async (route: Route) => {
     const body = `
 (function () {
   function Razorpay(options) {
@@ -115,18 +122,21 @@ function installCheckoutDouble(page: Page): Promise<void> {
       }
     }
     root.querySelector('[data-testid="rzp-dismiss"]').onclick = close;
-    root.querySelector('[data-testid="rzp-pay"]').onclick = function () {
+    root.querySelector('[data-testid="rzp-pay"]').onclick = async function () {
       var number = (root.querySelector('[data-testid="rzp-card-number"]').value || "").replace(/\\s+/g, "");
       if (number !== "4100280000001007") {
         alert("Use official test card 4100 2800 0000 1007");
         return;
       }
+      var paymentId = "pay_test_" + Date.now();
+      var orderId = self.options.order_id;
+      var signature = await window.commercepilotSignPayment(orderId, paymentId);
       root.remove();
       if (typeof self.options.handler === "function") {
         self.options.handler({
-          razorpay_payment_id: "pay_test_" + Date.now(),
-          razorpay_order_id: self.options.order_id,
-          razorpay_signature: "sig_test_pending_phase17"
+          razorpay_payment_id: paymentId,
+          razorpay_order_id: orderId,
+          razorpay_signature: signature
         });
       }
     };
@@ -272,11 +282,20 @@ test("shoe demo: Checkout success path with official test card + no secret leak"
   );
   await page.getByTestId("rzp-pay").click();
   const verifyResponse = await verify;
-  expect(verifyResponse.status()).toBe(501);
+  expect(verifyResponse.status()).toBe(200);
+  const verifyBody = (await verifyResponse.json()) as { verified: boolean; orderState: string };
+  expect(verifyBody).toEqual({ verified: true, orderState: "PAYMENT_AUTHORIZED" });
   await expect(page.getByTestId("payment-provisional-success")).toBeVisible();
+  await expect(page.getByTestId("payment-order-state")).toContainText("PAYMENT_AUTHORIZED");
 
-  const stored = await prisma.order.findUnique({ where: { purchaseIntentId: intentId } });
+  const stored = await prisma.order.findUnique({
+    where: { purchaseIntentId: intentId },
+    include: { payments: true },
+  });
   expect(stored?.razorpayOrderId).toBe(orderBody.razorpayOrderId);
+  expect(stored?.state).toBe("PAYMENT_AUTHORIZED");
+  expect(stored?.payments).toHaveLength(1);
+  expect(stored?.payments[0]?.signatureVerified).toBe(true);
   expect(traffic.createOrderCalls).toBe(1);
   traffic.assertNoSecret();
 });
