@@ -4,6 +4,7 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import type { Env } from "./config/env";
 import { createAuthRouter } from "./modules/auth/auth.routes";
 import { createCatalogRouter } from "./modules/catalog/catalog.routes";
+import { createOrchestratorRouter } from "./modules/orchestrator/orchestrator.routes";
 import { createPolicyRouter } from "./modules/policy/policy.routes";
 
 export type AppConfig = Pick<
@@ -45,6 +46,7 @@ export function createApp(config: AppConfig): Express {
   app.use("/auth", createAuthRouter());
   app.use(createCatalogRouter());
   app.use(createPolicyRouter());
+  app.use(createOrchestratorRouter());
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     const message = err instanceof Error ? err.message : "Internal error";

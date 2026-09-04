@@ -940,6 +940,32 @@ export async function seedCatalog(): Promise<SeedSummary> {
     });
   }
 
+  const priyaId = userId("priya");
+  await prisma.financialPolicy.upsert({
+    where: { userId: priyaId },
+    create: {
+      userId: priyaId,
+      maxAutonomousAmount: new Prisma.Decimal("5000.00"),
+      dailySpendingLimit: new Prisma.Decimal("10000.00"),
+      approvalThreshold: new Prisma.Decimal("5000.00"),
+      allowedCategories: ["Electronics", "Sports", "Travel"],
+      blockedCategories: [],
+      trustedMerchants: [],
+      autonomousEnabled: true,
+      maxAutonomousTxnsPerDay: 3,
+    },
+    update: {
+      maxAutonomousAmount: new Prisma.Decimal("5000.00"),
+      dailySpendingLimit: new Prisma.Decimal("10000.00"),
+      approvalThreshold: new Prisma.Decimal("5000.00"),
+      allowedCategories: ["Electronics", "Sports", "Travel"],
+      blockedCategories: [],
+      trustedMerchants: [],
+      autonomousEnabled: true,
+      maxAutonomousTxnsPerDay: 3,
+    },
+  });
+
   for (const product of SEED_PRODUCTS) {
     const id = productId(product.key);
     const tags = product.tags.map((tag) => tag.toLowerCase());
