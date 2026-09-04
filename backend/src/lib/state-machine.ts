@@ -82,6 +82,9 @@ const DIRECT_TRANSITIONS: ReadonlyArray<readonly [OrderState, OrderEvent, OrderS
   ["PAYMENT_PENDING", "signature_verified", "PAYMENT_AUTHORIZED"],
   ["PAYMENT_PENDING", "signature_invalid", "PAYMENT_VERIFICATION_FAILED"],
   ["PAYMENT_PENDING", "payment_failed_webhook", "PAYMENT_FAILED"],
+  // Phase 18: webhook is authoritative even if Phase 17 verify never ran.
+  ["ORDER_CREATED", "webhook_captured", "PAYMENT_CAPTURED"],
+  ["PAYMENT_PENDING", "webhook_captured", "PAYMENT_CAPTURED"],
   ["PAYMENT_AUTHORIZED", "webhook_captured", "PAYMENT_CAPTURED"],
   ["PAYMENT_AUTHORIZED", "webhook_failed", "PAYMENT_FAILED"],
   ["PAYMENT_CAPTURED", "order_paid_confirmed", "COMPLETED"],

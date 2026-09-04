@@ -35,6 +35,7 @@ services:
       APPROVAL_TTL_MINUTES: "15"
       RAZORPAY_KEY_ID: rzp_test_replace_me
       RAZORPAY_KEY_SECRET: replace-me
+      RAZORPAY_WEBHOOK_SECRET: replace-me
     depends_on:
       postgres:
         condition: service_healthy

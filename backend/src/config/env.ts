@@ -44,6 +44,8 @@ const envSchema = z.object({
   // Test-mode placeholders in .env.example only. Secret is backend-only.
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
+  // Distinct from KEY_SECRET — configured on the Razorpay webhook endpoint.
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

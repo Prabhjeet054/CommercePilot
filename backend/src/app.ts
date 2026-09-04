@@ -10,6 +10,7 @@ import { createCatalogRouter } from "./modules/catalog/catalog.routes";
 import { createOrchestratorRouter } from "./modules/orchestrator/orchestrator.routes";
 import { createPaymentsRouter } from "./modules/payments/payments.routes";
 import { createPolicyRouter } from "./modules/policy/policy.routes";
+import { createWebhookRouter } from "./modules/webhooks/webhook.routes";
 
 export type AppConfig = Pick<
   Env,
@@ -37,6 +38,14 @@ export function createApp(config: AppConfig): Express {
       credentials: true,
     }),
   );
+
+  // Razorpay webhooks must see the raw body for HMAC. Mount before express.json().
+  app.use(
+    "/webhooks",
+    express.raw({ type: "application/json", limit: "1mb" }),
+    createWebhookRouter(),
+  );
+
   app.use(express.json({ limit: "32kb" }));
   app.use(cookieParser());
 
