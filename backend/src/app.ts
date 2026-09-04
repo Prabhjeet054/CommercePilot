@@ -3,6 +3,7 @@ import cors from "cors";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { isAllowedFrontendOrigin } from "./lib/cors-origin";
 import type { Env } from "./config/env";
+import { LLMConfigError } from "./lib/llm-provider";
 import { createApprovalRouter } from "./modules/approvals/approval.routes";
 import { createAuthRouter } from "./modules/auth/auth.routes";
 import { createCatalogRouter } from "./modules/catalog/catalog.routes";
@@ -54,6 +55,15 @@ export function createApp(config: AppConfig): Express {
   app.use(createPaymentsRouter());
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (err instanceof LLMConfigError) {
+      console.error(`LLM config error: ${err.message}`);
+      res.status(503).json({
+        error: "LLM_NOT_CONFIGURED",
+        message:
+          "AI is not configured. Set a real LLM_PROVIDER_API_KEY in .env, or set LLM_PROVIDER=mock for local demo phrases.",
+      });
+      return;
+    }
     const message = err instanceof Error ? err.message : "Internal error";
     console.error(`Unhandled error: ${message}`);
     res.status(500).json({ error: "INTERNAL_ERROR" });

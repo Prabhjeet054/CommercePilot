@@ -47,6 +47,11 @@ export class MockLLMProvider implements LLMProvider {
       return Promise.resolve(toRaw(this.fixtures[args.prompt]));
     }
 
+    const fuzzy = this.findFixtureByNormalizedUserText(args.prompt);
+    if (fuzzy !== undefined) {
+      return Promise.resolve(toRaw(fuzzy));
+    }
+
     return Promise.reject(
       new LLMOutputError(
         `No mock fixture registered for prompt: ${JSON.stringify(args.prompt)}`,
@@ -55,4 +60,36 @@ export class MockLLMProvider implements LLMProvider {
       ),
     );
   }
+
+  /** Match freeform variants when the exact prompt string differs only by punctuation/spacing. */
+  private findFixtureByNormalizedUserText(prompt: string): unknown | undefined {
+    const needle = normalizeUserText(extractUserText(prompt));
+    if (!needle) {
+      return undefined;
+    }
+    for (const [fixturePrompt, payload] of Object.entries(this.fixtures)) {
+      if (normalizeUserText(extractUserText(fixturePrompt)) === needle) {
+        return payload;
+      }
+    }
+    return undefined;
+  }
+}
+
+function extractUserText(prompt: string): string {
+  const start = prompt.indexOf("<<<USER_TEXT>>>");
+  const end = prompt.indexOf("<<<END_USER_TEXT>>>");
+  if (start < 0 || end < 0 || end <= start) {
+    return prompt;
+  }
+  return prompt.slice(start + "<<<USER_TEXT>>>".length, end).trim();
+}
+
+function normalizeUserText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[₹,\s]+/g, " ")
+    .replace(/[^a-z0-9 ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
