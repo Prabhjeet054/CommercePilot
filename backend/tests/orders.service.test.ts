@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { IllegalTransitionError } from "../src/lib/state-machine";
+import { applyPurchaseIntentEvent, IllegalTransitionError } from "../src/lib/state-machine";
 import { prisma } from "../src/lib/prisma";
 import { DEMO_SHOE_PRICE, DEMO_SHOE_PRODUCT_ID } from "../src/modules/catalog/catalog.constants";
 import { createInternalOrder } from "../src/modules/orders/order.service";
@@ -36,16 +36,6 @@ async function createIntent(userId: string, status: string) {
 describe("createInternalOrder", () => {
   beforeAll(async () => {
     await seedCatalog();
-  });
-
-  afterAll(async () => {
-    await prisma.order.deleteMany({
-      where: { purchaseIntent: { user: { email: { startsWith: "order-service-" } } } },
-    });
-    await prisma.purchaseIntent.deleteMany({
-      where: { user: { email: { startsWith: "order-service-" } } },
-    });
-    await prisma.user.deleteMany({ where: { email: { startsWith: "order-service-" } } });
   });
 
   it("creates an Order in ORDER_CREATED with no razorpayOrderId from POLICY_ALLOWED", async () => {
@@ -124,4 +114,48 @@ describe("createInternalOrder", () => {
 
     expect(await prisma.order.count({ where: { purchaseIntentId: intent.id } })).toBe(1);
   });
+});
+
+describe("applyPurchaseIntentEvent adversarial and retry", () => {
+  it("rejects POLICY_DENIED → COMPLETED via the persist wrapper and does not change the row", async () => {
+    const user = await createUser();
+    const intent = await createIntent(user.id, "POLICY_DENIED");
+
+    await expect(applyPurchaseIntentEvent(intent.id, "order_paid_confirmed")).rejects.toBeInstanceOf(
+      IllegalTransitionError,
+    );
+    await expect(applyPurchaseIntentEvent(intent.id, "webhook_captured")).rejects.toBeInstanceOf(
+      IllegalTransitionError,
+    );
+    await expect(applyPurchaseIntentEvent(intent.id, "order_created")).rejects.toBeInstanceOf(
+      IllegalTransitionError,
+    );
+
+    const stored = await prisma.purchaseIntent.findUniqueOrThrow({ where: { id: intent.id } });
+    expect(stored.status).toBe("POLICY_DENIED");
+    expect(await prisma.order.count({ where: { purchaseIntentId: intent.id } })).toBe(0);
+  });
+
+  it("a repeated state-changing event errors and leaves the persisted status unchanged", async () => {
+    const user = await createUser();
+    const intent = await createIntent(user.id, "CREATED");
+
+    await expect(applyPurchaseIntentEvent(intent.id, "intent_extracted")).resolves.toBe("INTENT_EXTRACTED");
+    await expect(applyPurchaseIntentEvent(intent.id, "intent_extracted")).rejects.toBeInstanceOf(
+      IllegalTransitionError,
+    );
+
+    const stored = await prisma.purchaseIntent.findUniqueOrThrow({ where: { id: intent.id } });
+    expect(stored.status).toBe("INTENT_EXTRACTED");
+  });
+});
+
+afterAll(async () => {
+  await prisma.order.deleteMany({
+    where: { purchaseIntent: { user: { email: { startsWith: "order-service-" } } } },
+  });
+  await prisma.purchaseIntent.deleteMany({
+    where: { user: { email: { startsWith: "order-service-" } } },
+  });
+  await prisma.user.deleteMany({ where: { email: { startsWith: "order-service-" } } });
 });

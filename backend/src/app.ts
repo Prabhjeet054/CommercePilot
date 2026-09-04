@@ -1,6 +1,7 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
+import { isAllowedFrontendOrigin } from "./lib/cors-origin";
 import type { Env } from "./config/env";
 import { createApprovalRouter } from "./modules/approvals/approval.routes";
 import { createAuthRouter } from "./modules/auth/auth.routes";
@@ -25,7 +26,7 @@ export function createApp(config: AppConfig): Express {
   app.use(
     cors({
       origin: (requestOrigin, callback) => {
-        if (!requestOrigin || requestOrigin === config.FRONTEND_URL) {
+        if (isAllowedFrontendOrigin(requestOrigin, config.FRONTEND_URL)) {
           callback(null, true);
           return;
         }

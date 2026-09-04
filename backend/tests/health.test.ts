@@ -32,9 +32,19 @@ describe("GET /health", () => {
       "http://localhost:5173",
     );
 
+    const allowedLoopback = await request(app)
+      .get("/health")
+      .set("Origin", "http://127.0.0.1:5173");
+    expect(allowedLoopback.headers["access-control-allow-origin"]).toBe("http://127.0.0.1:5173");
+
     const blocked = await request(app)
       .get("/health")
       .set("Origin", "http://evil.example");
     expect(blocked.headers["access-control-allow-origin"]).toBeUndefined();
+
+    const blockedPort = await request(app)
+      .get("/health")
+      .set("Origin", "http://127.0.0.1:9999");
+    expect(blockedPort.headers["access-control-allow-origin"]).toBeUndefined();
   });
 });
