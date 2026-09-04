@@ -40,6 +40,7 @@ const envSchema = z.object({
   // Consumed by getLLMProvider(); "openai" is the real adapter, "mock" forces the test double.
   LLM_PROVIDER: z.string().optional(),
   LLM_PROVIDER_API_KEY: z.string().optional(),
+  APPROVAL_TTL_MINUTES: z.coerce.number().int().positive().max(24 * 60).default(15),
 });
 
 export type Env = z.infer<typeof envSchema>;

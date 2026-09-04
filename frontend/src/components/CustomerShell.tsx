@@ -20,6 +20,9 @@ export function CustomerShell({ title, children }: { title: string; children: Re
             <Link to="/shop">Shop</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
+            <Link to="/approvals">Approvals</Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
             <Link to="/policy">Policy</Link>
           </Button>
           <span className="font-mono text-xs text-muted-foreground">{user?.email}</span>

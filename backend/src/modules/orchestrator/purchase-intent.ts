@@ -1,5 +1,6 @@
-import { Prisma, type AgentRun, type PolicyEvaluation, type PurchaseIntent } from "@prisma/client";
+import { Prisma, type AgentRun, type Approval, type PolicyEvaluation, type PurchaseIntent } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
+import { createApproval } from "../approvals/approval.service";
 import { extractIntent } from "../intent/intent-agent";
 import type { PurchaseMode, StructuredIntent } from "../intent/intent.schema";
 import { evaluateAndPersist } from "../policy/policy.service";
@@ -50,6 +51,14 @@ export type PolicyDecisionDto = {
   evaluationId: string;
 };
 
+export type ApprovalSummaryDto = {
+  id: string;
+  status: string;
+  expiresAt: string | null;
+  reasonCode: string | null;
+  amount: string | null;
+};
+
 export type PurchaseIntentPipelineResult = {
   id: string;
   status: string;
@@ -65,6 +74,7 @@ export type PurchaseIntentPipelineResult = {
     merchantId: string;
   } | null;
   policyDecision: PolicyDecisionDto | null;
+  approval: ApprovalSummaryDto | null;
 };
 
 type DecisionWithProduct = Prisma.AgentDecisionGetPayload<{
@@ -77,8 +87,22 @@ export type StoredPurchaseIntent = {
   intent: PurchaseIntent;
   agentRun: (AgentRun & { decisions: DecisionWithProduct[] }) | null;
   policyEvaluations: PolicyEvaluation[];
+  approval: Approval | null;
   orderCount: number;
 };
+
+function toApprovalSummary(approval: Approval | null): ApprovalSummaryDto | null {
+  if (!approval) {
+    return null;
+  }
+  return {
+    id: approval.id,
+    status: approval.status,
+    expiresAt: approval.expiresAt?.toISOString() ?? null,
+    reasonCode: approval.reasonCode,
+    amount: approval.amount ? approval.amount.toFixed(2) : null,
+  };
+}
 
 export type PurchaseIntentListItem = {
   id: string;
@@ -235,6 +259,7 @@ export async function runPurchaseIntentPipeline(
       rankedCandidates: [],
       selectedProduct: null,
       policyDecision: null,
+      approval: null,
     };
   }
 
@@ -260,6 +285,7 @@ export async function runPurchaseIntentPipeline(
       rankedCandidates,
       selectedProduct: null,
       policyDecision: null,
+      approval: null,
     };
   }
 
@@ -281,6 +307,17 @@ export async function runPurchaseIntentPipeline(
   });
 
   const result = policyStatusForDecision(policy.decision);
+  let approval: Approval | null = null;
+  if (policy.decision === "REQUIRE_APPROVAL") {
+    approval = await createApproval({
+      purchaseIntentId: created.id,
+      userId: input.userId,
+      productId: discovered.id,
+      amount: proposal.amount,
+      policyEvaluationId: policy.evaluation.id,
+      reasonCode: policy.reasonCode,
+    });
+  }
   // Phase 13: replace with transition(PRODUCTS_RANKED, policy_evaluated_*)
   await setIntentStatus(created.id, result);
   await prisma.agentRun.update({
@@ -307,6 +344,7 @@ export async function runPurchaseIntentPipeline(
       reasonCode: policy.reasonCode,
       evaluationId: policy.evaluation.id,
     },
+    approval: toApprovalSummary(approval),
   };
 }
 
@@ -344,6 +382,7 @@ export async function getStoredPurchaseIntent(
         },
       },
       policyEvaluations: { orderBy: { evaluatedAt: "asc" } },
+      approval: true,
       order: { select: { id: true } },
     },
   });
@@ -351,11 +390,12 @@ export async function getStoredPurchaseIntent(
     return null;
   }
 
-  const { agentRun, policyEvaluations, order, ...row } = intent;
+  const { agentRun, policyEvaluations, approval, order, ...row } = intent;
   return {
     intent: row,
     agentRun,
     policyEvaluations,
+    approval,
     orderCount: order ? 1 : 0,
   };
 }
@@ -398,6 +438,7 @@ export function serializeStoredPurchaseIntent(stored: StoredPurchaseIntent) {
       policySnapshot: evaluation.policySnapshot,
       evaluatedAt: evaluation.evaluatedAt.toISOString(),
     })),
+    approval: toApprovalSummary(stored.approval),
     orderCount: stored.orderCount,
   };
 }

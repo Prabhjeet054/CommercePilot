@@ -157,6 +157,9 @@ describe("POST /purchase-intents", () => {
   });
 
   afterAll(async () => {
+    await prisma.approval.deleteMany({
+      where: { user: { email: { startsWith: "orchestrator-test-" } } },
+    });
     await prisma.purchaseIntent.deleteMany({
       where: { user: { email: { startsWith: "orchestrator-test-" } } },
     });
@@ -217,6 +220,7 @@ describe("POST /purchase-intents", () => {
     expect(response.body.policyDecision.decision).toBe("ALLOW");
     expect(response.body.policyDecision.reasonCode).toBe(REASON.WITHIN_POLICY);
     expect(response.body.rankedCandidates.some((row: { selected: boolean }) => row.selected)).toBe(true);
+    expect(response.body.approval).toBeNull();
     expect(response.body.rankedCandidates.find((row: { selected: boolean }) => row.selected).productId).toBe(
       DEMO_SHOE_PRODUCT_ID,
     );
@@ -269,14 +273,26 @@ describe("POST /purchase-intents", () => {
     expect(response.body.policyDecision.decision).toBe("REQUIRE_APPROVAL");
     // Demo policy dailySpendingLimit is ₹10,000; Phase 5 checks that before approvalThreshold.
     expect(response.body.policyDecision.reasonCode).toBe(REASON.DAILY_LIMIT_EXCEEDED);
+    expect(response.body.approval).toMatchObject({
+      status: "PENDING",
+      reasonCode: REASON.DAILY_LIMIT_EXCEEDED,
+      amount: DEMO_LAPTOP_PRICE,
+    });
+    expect(response.body.approval.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
 
     const stored = await prisma.purchaseIntent.findUniqueOrThrow({
       where: { id: response.body.id },
-      include: { policyEvaluations: true, order: true, agentRun: { include: { decisions: true } } },
+      include: { policyEvaluations: true, order: true, agentRun: { include: { decisions: true } }, approval: true },
     });
     expect(stored.policyEvaluations[0]?.decision).toBe("REQUIRE_APPROVAL");
     expect(stored.policyEvaluations[0]?.reasonCode).toBe(REASON.DAILY_LIMIT_EXCEEDED);
     expect(stored.order).toBeNull();
+    expect(stored.approval).not.toBeNull();
+    expect(stored.approval?.status).toBe("PENDING");
+    expect(stored.approval?.productId).toBe(DEMO_LAPTOP_PRODUCT_ID);
+    expect(stored.approval?.amount?.toFixed(2)).toBe(DEMO_LAPTOP_PRICE);
     expect(stored.agentRun?.decisions.some((row) => row.selected && row.productId === DEMO_LAPTOP_PRODUCT_ID)).toBe(
       true,
     );
@@ -297,6 +313,7 @@ describe("POST /purchase-intents", () => {
     expect(response.body.policyDecision.reasonCode).toBe(REASON.AMOUNT_ABOVE_APPROVAL_THRESHOLD);
     expect(response.body.selectedProduct.id).toBe(DEMO_LAPTOP_PRODUCT_ID);
     expect(response.body.selectedProduct.price).toBe(DEMO_LAPTOP_PRICE);
+    expect(response.body.approval?.status).toBe("PENDING");
     expect(await prisma.order.count({ where: { purchaseIntentId: response.body.id } })).toBe(0);
 
     const stored = await prisma.purchaseIntent.findUniqueOrThrow({
@@ -361,6 +378,7 @@ describe("POST /purchase-intents", () => {
     expect(response.body.rankedCandidates).toEqual([]);
     expect(response.body.policyDecision).toBeNull();
     expect(response.body.selectedProduct).toBeNull();
+    expect(response.body.approval).toBeNull();
 
     const stored = await prisma.purchaseIntent.findUniqueOrThrow({
       where: { id: response.body.id },

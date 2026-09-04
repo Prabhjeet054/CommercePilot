@@ -32,6 +32,7 @@ services:
       COOKIE_SECURE: "false"
       LLM_PROVIDER: openai
       LLM_PROVIDER_API_KEY: replace-me
+      APPROVAL_TTL_MINUTES: "15"
     depends_on:
       postgres:
         condition: service_healthy

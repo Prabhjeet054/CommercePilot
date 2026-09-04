@@ -94,7 +94,7 @@ test("demo phrase selects the ₹4,499 shoe and shows an allowed autonomous resu
   expect(local.cookie).not.toMatch(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
 });
 
-test("laptop phrase shows approval required without an Approve button", async ({ page }) => {
+test("laptop phrase opens a working Approval Screen with Approve and Reject", async ({ page }) => {
   const accessToken = await loginAsDemoCustomer(page);
   await submitShoppingGoal(page, DEMO_LAPTOP_PHRASE, false);
 
@@ -105,6 +105,21 @@ test("laptop phrase shows approval required without an Approve button", async ({
   await expect(page.getByText(/₹1,20,000/).first()).toBeVisible();
   await expect(page.getByRole("button", { name: /^approve$/i })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^reject$/i })).toHaveCount(0);
+
+  await page.getByRole("link", { name: /open approval screen/i }).click();
+  await page.waitForURL(/\/approvals\/[0-9a-f-]+/i);
+
+  await expect(page.getByRole("heading", { name: /Nova Ultrabook/i })).toBeVisible();
+  await expect(page.getByText("Nova Electronics", { exact: true })).toBeVisible();
+  await expect(page.getByText(/₹1,20,000/).first()).toBeVisible();
+  await expect(page.getByText(/approval is required|daily spending limit|approval threshold/i).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /^approve$/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^reject$/i })).toBeVisible();
+
+  await page.getByRole("button", { name: /^reject$/i }).click();
+  await expect(page.getByTestId("approval-status")).toHaveText(/rejected/i);
+  await expect(page.getByRole("button", { name: /^approve$/i })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^reject$/i })).toBeDisabled();
 
   const html = await page.content();
   expect(html).not.toContain(accessToken);

@@ -49,7 +49,7 @@ export function PurchaseReviewSummary({ view }: { view: PurchaseIntentView }) {
           Policy allowed this purchase. Review the summary above; payment is not started in this step.
         </p>
       )}
-      {needsApproval && (
+      {needsApproval && view.approval?.status === "PENDING" && (
         <div className="space-y-2">
           <p data-testid="approval-required" className="text-sm font-medium text-status-pending">
             Approval required
@@ -57,7 +57,19 @@ export function PurchaseReviewSummary({ view }: { view: PurchaseIntentView }) {
           <p className="text-sm text-status-pending">
             This amount needs your approval before any payment can start. Razorpay has not been called.
           </p>
+          <Link
+            to={`/approvals/${view.approval.id}`}
+            className="inline-block font-mono text-xs text-primary hover:underline"
+          >
+            Open approval screen
+          </Link>
         </div>
+      )}
+      {view.approval?.status === "APPROVED" && (
+        <p className="text-sm text-status-completed">You approved this purchase. Payment has not started.</p>
+      )}
+      {(view.approval?.status === "REJECTED" || view.status === "APPROVAL_REJECTED") && (
+        <p className="text-sm text-status-denied">You rejected this purchase. No order was created.</p>
       )}
       {denied && (
         <p className="text-sm text-status-denied">

@@ -2,6 +2,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import type { Env } from "./config/env";
+import { createApprovalRouter } from "./modules/approvals/approval.routes";
 import { createAuthRouter } from "./modules/auth/auth.routes";
 import { createCatalogRouter } from "./modules/catalog/catalog.routes";
 import { createOrchestratorRouter } from "./modules/orchestrator/orchestrator.routes";
@@ -47,6 +48,7 @@ export function createApp(config: AppConfig): Express {
   app.use(createCatalogRouter());
   app.use(createPolicyRouter());
   app.use(createOrchestratorRouter());
+  app.use(createApprovalRouter());
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     const message = err instanceof Error ? err.message : "Internal error";

@@ -4,6 +4,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth-context";
 import AICommerceDashboard from "@/pages/AICommerceDashboard";
 import AIShoppingChat from "@/pages/AIShoppingChat";
+import ApprovalScreen from "@/pages/ApprovalScreen";
 import LoginPage from "@/pages/Login";
 import PolicySettingsPage from "@/pages/PolicySettings";
 import ProductComparisonPage from "@/pages/ProductComparison";
@@ -158,6 +159,22 @@ export default function App() {
         element={
           <ProtectedRoute roles={["customer"]}>
             <PurchaseReviewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/approvals"
+        element={
+          <ProtectedRoute roles={["customer"]}>
+            <ApprovalScreen />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/approvals/:id"
+        element={
+          <ProtectedRoute roles={["customer"]}>
+            <ApprovalScreen />
           </ProtectedRoute>
         }
       />

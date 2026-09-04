@@ -49,5 +49,6 @@ describe("loadEnv", () => {
     expect(env.FRONTEND_URL).toBe("http://localhost:5173");
     expect(env.DATABASE_URL).toContain("postgresql://");
     expect(env.JWT_SECRET).toHaveLength(env.JWT_SECRET.length);
+    expect(env.APPROVAL_TTL_MINUTES).toBe(15);
   });
 });

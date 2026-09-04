@@ -49,6 +49,14 @@ export type PolicyDecisionView = {
   evaluationId: string;
 };
 
+export type ApprovalSummaryView = {
+  id: string;
+  status: string;
+  expiresAt: string | null;
+  reasonCode: string | null;
+  amount: string | null;
+};
+
 export type SelectedProductView = {
   id: string;
   name: string;
@@ -67,6 +75,7 @@ export type PurchaseIntentView = {
   rankedCandidates: RankedCandidate[];
   selectedProduct: SelectedProductView | null;
   policyDecision: PolicyDecisionView | null;
+  approval: ApprovalSummaryView | null;
 };
 
 export type PurchaseIntentListItem = {
@@ -138,8 +147,31 @@ function asFactors(value: unknown): RankingFactor[] {
   });
 }
 
+function asApprovalSummary(value: unknown): ApprovalSummaryView | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  if (typeof row.id !== "string") {
+    return null;
+  }
+  return {
+    id: row.id,
+    status: String(row.status ?? ""),
+    expiresAt: typeof row.expiresAt === "string" ? row.expiresAt : null,
+    reasonCode: typeof row.reasonCode === "string" ? row.reasonCode : null,
+    amount: typeof row.amount === "string" ? row.amount : null,
+  };
+}
+
 function resultFromStored(status: string, hasDecisions: boolean, hasPolicy: boolean): string {
-  if (status === "POLICY_ALLOWED" || status === "APPROVAL_PENDING" || status === "POLICY_DENIED") {
+  if (
+    status === "POLICY_ALLOWED" ||
+    status === "APPROVAL_PENDING" ||
+    status === "POLICY_DENIED" ||
+    status === "APPROVED" ||
+    status === "APPROVAL_REJECTED"
+  ) {
     return status;
   }
   if (!hasDecisions && !hasPolicy) {
@@ -176,6 +208,7 @@ export function fromCreateResponse(
     })),
     selectedProduct: selected,
     policyDecision: policy,
+    approval: asApprovalSummary(body.approval),
   };
 }
 
@@ -234,6 +267,7 @@ export function fromStoredResponse(body: Record<string, unknown>): PurchaseInten
     policyDecision: latest
       ? { decision: latest.decision, reasonCode: latest.reasonCode, evaluationId: latest.id }
       : null,
+    approval: asApprovalSummary(body.approval),
   };
 }
 
