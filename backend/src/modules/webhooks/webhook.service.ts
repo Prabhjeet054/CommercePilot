@@ -92,7 +92,9 @@ async function finalizeCaptured(orderId: string, current: OrderState): Promise<O
   if (
     current === "ORDER_CREATED" ||
     current === "PAYMENT_PENDING" ||
-    current === "PAYMENT_AUTHORIZED"
+    current === "PAYMENT_AUTHORIZED" ||
+    current === "PAYMENT_FAILED" ||
+    current === "PAYMENT_VERIFICATION_FAILED"
   ) {
     await applyOrderLifecycleEvent(orderId, "webhook_captured");
     return applyOrderLifecycleEvent(orderId, "order_paid_confirmed");

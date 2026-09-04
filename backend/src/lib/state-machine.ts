@@ -86,6 +86,9 @@ const DIRECT_TRANSITIONS: ReadonlyArray<readonly [OrderState, OrderEvent, OrderS
   ["ORDER_CREATED", "webhook_captured", "PAYMENT_CAPTURED"],
   ["PAYMENT_PENDING", "webhook_captured", "PAYMENT_CAPTURED"],
   ["PAYMENT_AUTHORIZED", "webhook_captured", "PAYMENT_CAPTURED"],
+  // Razorpay: payment.failed can be followed by payment.captured (UPI retry / late auth).
+  ["PAYMENT_FAILED", "webhook_captured", "PAYMENT_CAPTURED"],
+  ["PAYMENT_VERIFICATION_FAILED", "webhook_captured", "PAYMENT_CAPTURED"],
   ["PAYMENT_AUTHORIZED", "webhook_failed", "PAYMENT_FAILED"],
   ["PAYMENT_CAPTURED", "order_paid_confirmed", "COMPLETED"],
 ];

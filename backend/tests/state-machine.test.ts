@@ -28,6 +28,8 @@ const PRD_ROWS: Array<{ from: OrderState; event: OrderEvent; to: OrderState }> =
   { from: "ORDER_CREATED", event: "webhook_captured", to: "PAYMENT_CAPTURED" },
   { from: "PAYMENT_PENDING", event: "webhook_captured", to: "PAYMENT_CAPTURED" },
   { from: "PAYMENT_AUTHORIZED", event: "webhook_captured", to: "PAYMENT_CAPTURED" },
+  { from: "PAYMENT_FAILED", event: "webhook_captured", to: "PAYMENT_CAPTURED" },
+  { from: "PAYMENT_VERIFICATION_FAILED", event: "webhook_captured", to: "PAYMENT_CAPTURED" },
   { from: "PAYMENT_AUTHORIZED", event: "webhook_failed", to: "PAYMENT_FAILED" },
   { from: "PAYMENT_CAPTURED", event: "order_paid_confirmed", to: "COMPLETED" },
 ];
