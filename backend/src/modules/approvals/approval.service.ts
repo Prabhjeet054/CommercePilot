@@ -1,5 +1,6 @@
 import { Prisma, type Approval } from "@prisma/client";
 import { loadEnv } from "../../config/env";
+import { applyPurchaseIntentEvent, IllegalTransitionError } from "../../lib/state-machine";
 import { prisma } from "../../lib/prisma";
 import type { PolicySnapshot } from "../policy/policy.service";
 
@@ -204,7 +205,7 @@ export async function decideApproval(
   now: Date = new Date(),
 ): Promise<DecideApprovalResult> {
   const nextStatus = decision === "approve" ? "APPROVED" : "REJECTED";
-  const intentStatus = decision === "approve" ? "APPROVED" : "APPROVAL_REJECTED";
+  const intentEvent = decision === "approve" ? "approved" : "rejected";
 
   const applied = await prisma.$transaction(async (tx) => {
     const result = await tx.approval.updateMany({
@@ -223,10 +224,7 @@ export async function decideApproval(
       return null;
     }
     const approval = await tx.approval.findUniqueOrThrow({ where: { id: approvalId } });
-    await tx.purchaseIntent.update({
-      where: { id: approval.purchaseIntentId },
-      data: { status: intentStatus },
-    });
+    await applyPurchaseIntentEvent(approval.purchaseIntentId, intentEvent, tx);
     return approval;
   });
 
@@ -251,6 +249,13 @@ export async function decideApproval(
         where: { id: approvalId, userId, status: "PENDING" },
         data: { status: "EXPIRED" },
       });
+    }
+    try {
+      await applyPurchaseIntentEvent(existing.purchaseIntentId, "expired");
+    } catch (err) {
+      if (!(err instanceof IllegalTransitionError)) {
+        throw err;
+      }
     }
     return { ok: false, reason: DECISION_CONFLICT.EXPIRED };
   }

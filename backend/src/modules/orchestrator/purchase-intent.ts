@@ -1,5 +1,10 @@
 import { Prisma, type AgentRun, type Approval, type PolicyEvaluation, type PurchaseIntent } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
+import {
+  applyPurchaseIntentEvent,
+  INITIAL_INTENT_STATE,
+  policyEventForDecision,
+} from "../../lib/state-machine";
 import { createApproval } from "../approvals/approval.service";
 import { extractIntent } from "../intent/intent-agent";
 import type { PurchaseMode, StructuredIntent } from "../intent/intent.schema";
@@ -143,15 +148,6 @@ function policyStatusForDecision(decision: string): PipelineResultCode {
   return PIPELINE_RESULT.POLICY_DENIED;
 }
 
-/**
- * Direct status string write.
- * Phase 13 will retrofit this to the formal state-machine module (`transition`).
- * Until then, only CHECK-constraint-legal values from the Prisma migration are used.
- */
-async function setIntentStatus(id: string, status: string): Promise<void> {
-  await prisma.purchaseIntent.update({ where: { id }, data: { status } });
-}
-
 function toRankedDtos(
   ranked: RankedCandidate[],
   candidatesById: Map<string, DiscoveredProduct>,
@@ -209,7 +205,7 @@ export async function runPurchaseIntentPipeline(
       rawText: input.text,
       structuredIntent: {},
       purchaseMode: input.purchaseMode,
-      status: "CREATED",
+      status: INITIAL_INTENT_STATE,
     },
   });
 
@@ -239,8 +235,7 @@ export async function runPurchaseIntentPipeline(
       purchaseMode: input.purchaseMode,
     },
   });
-  // Phase 13: replace with transition(CREATED, "intent_extracted")
-  await setIntentStatus(created.id, "INTENT_EXTRACTED");
+  await applyPurchaseIntentEvent(created.id, "intent_extracted");
 
   const candidates = await discoverCatalogCandidates(intent);
   const candidatesById = new Map(candidates.map((product) => [product.id, product]));
@@ -266,8 +261,7 @@ export async function runPurchaseIntentPipeline(
   const { ranked, selected } = rankProducts(candidates, intent);
   const selectedId = selected?.product.id ?? null;
   await persistDecisions(agentRun.id, ranked, selectedId);
-  // Phase 13: replace with transition(INTENT_EXTRACTED, "products_ranked")
-  await setIntentStatus(created.id, "PRODUCTS_RANKED");
+  await applyPurchaseIntentEvent(created.id, "products_ranked");
 
   const rankedCandidates = toRankedDtos(ranked, candidatesById, selectedId);
 
@@ -318,8 +312,7 @@ export async function runPurchaseIntentPipeline(
       reasonCode: policy.reasonCode,
     });
   }
-  // Phase 13: replace with transition(PRODUCTS_RANKED, policy_evaluated_*)
-  await setIntentStatus(created.id, result);
+  await applyPurchaseIntentEvent(created.id, policyEventForDecision(policy.decision));
   await prisma.agentRun.update({
     where: { id: agentRun.id },
     data: { status: "COMPLETED", completedAt: new Date() },

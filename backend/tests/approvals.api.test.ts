@@ -328,7 +328,7 @@ describe("Approval API", () => {
     expect(row.consumedAt).toBeNull();
 
     const intent = await prisma.purchaseIntent.findUniqueOrThrow({ where: { id: created.intentId } });
-    expect(intent.status).toBe("APPROVAL_PENDING");
+    expect(intent.status).toBe("EXPIRED");
     expect(await prisma.order.count({ where: { purchaseIntentId: created.intentId } })).toBe(0);
   });
 
