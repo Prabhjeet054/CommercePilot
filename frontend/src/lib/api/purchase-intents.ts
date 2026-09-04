@@ -65,6 +65,15 @@ export type SelectedProductView = {
   merchantId: string;
 };
 
+export type OrderSummaryView = {
+  id: string;
+  state: string;
+  razorpayOrderId: string | null;
+  amount: string;
+  currency: string;
+  paymentStatus: string | null;
+};
+
 export type PurchaseIntentView = {
   id: string;
   rawText: string;
@@ -76,6 +85,7 @@ export type PurchaseIntentView = {
   selectedProduct: SelectedProductView | null;
   policyDecision: PolicyDecisionView | null;
   approval: ApprovalSummaryView | null;
+  order: OrderSummaryView | null;
 };
 
 export type PurchaseIntentListItem = {
@@ -170,7 +180,8 @@ function resultFromStored(status: string, hasDecisions: boolean, hasPolicy: bool
     status === "APPROVAL_PENDING" ||
     status === "POLICY_DENIED" ||
     status === "APPROVED" ||
-    status === "APPROVAL_REJECTED"
+    status === "APPROVAL_REJECTED" ||
+    status === "COMPLETED"
   ) {
     return status;
   }
@@ -178,6 +189,24 @@ function resultFromStored(status: string, hasDecisions: boolean, hasPolicy: bool
     return "NO_MATCHING_PRODUCTS";
   }
   return status;
+}
+
+function asOrderSummary(value: unknown): OrderSummaryView | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  if (typeof row.id !== "string" || typeof row.state !== "string") {
+    return null;
+  }
+  return {
+    id: row.id,
+    state: row.state,
+    razorpayOrderId: typeof row.razorpayOrderId === "string" ? row.razorpayOrderId : null,
+    amount: typeof row.amount === "string" ? row.amount : String(row.amount ?? "0.00"),
+    currency: typeof row.currency === "string" ? row.currency : "INR",
+    paymentStatus: typeof row.paymentStatus === "string" ? row.paymentStatus : null,
+  };
 }
 
 export function formatPrice(price: string | number): string {
@@ -209,6 +238,7 @@ export function fromCreateResponse(
     selectedProduct: selected,
     policyDecision: policy,
     approval: asApprovalSummary(body.approval),
+    order: asOrderSummary(body.order),
   };
 }
 
@@ -268,6 +298,7 @@ export function fromStoredResponse(body: Record<string, unknown>): PurchaseInten
       ? { decision: latest.decision, reasonCode: latest.reasonCode, evaluationId: latest.id }
       : null,
     approval: asApprovalSummary(body.approval),
+    order: asOrderSummary(body.order),
   };
 }
 

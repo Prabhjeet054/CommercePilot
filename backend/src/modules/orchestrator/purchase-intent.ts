@@ -93,7 +93,19 @@ export type StoredPurchaseIntent = {
   agentRun: (AgentRun & { decisions: DecisionWithProduct[] }) | null;
   policyEvaluations: PolicyEvaluation[];
   approval: Approval | null;
-  orderCount: number;
+  order: {
+    id: string;
+    state: string;
+    razorpayOrderId: string | null;
+    amount: { toFixed(digits: number): string };
+    currency: string;
+    payments: Array<{
+      id: string;
+      status: string;
+      razorpayPaymentId: string | null;
+      signatureVerified: boolean;
+    }>;
+  } | null;
 };
 
 function toApprovalSummary(approval: Approval | null): ApprovalSummaryDto | null {
@@ -376,7 +388,24 @@ export async function getStoredPurchaseIntent(
       },
       policyEvaluations: { orderBy: { evaluatedAt: "asc" } },
       approval: true,
-      order: { select: { id: true } },
+      order: {
+        select: {
+          id: true,
+          state: true,
+          razorpayOrderId: true,
+          amount: true,
+          currency: true,
+          payments: {
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              status: true,
+              razorpayPaymentId: true,
+              signatureVerified: true,
+            },
+          },
+        },
+      },
     },
   });
   if (!intent || intent.userId !== userId) {
@@ -389,7 +418,7 @@ export async function getStoredPurchaseIntent(
     agentRun,
     policyEvaluations,
     approval,
-    orderCount: order ? 1 : 0,
+    order,
   };
 }
 
@@ -432,6 +461,22 @@ export function serializeStoredPurchaseIntent(stored: StoredPurchaseIntent) {
       evaluatedAt: evaluation.evaluatedAt.toISOString(),
     })),
     approval: toApprovalSummary(stored.approval),
-    orderCount: stored.orderCount,
+    orderCount: stored.order ? 1 : 0,
+    order: stored.order
+      ? {
+          id: stored.order.id,
+          state: stored.order.state,
+          razorpayOrderId: stored.order.razorpayOrderId,
+          amount: stored.order.amount.toFixed(2),
+          currency: stored.order.currency,
+          paymentStatus: stored.order.payments[stored.order.payments.length - 1]?.status ?? null,
+          payments: stored.order.payments.map((payment) => ({
+            id: payment.id,
+            status: payment.status,
+            razorpayPaymentId: payment.razorpayPaymentId,
+            signatureVerified: payment.signatureVerified,
+          })),
+        }
+      : null,
   };
 }

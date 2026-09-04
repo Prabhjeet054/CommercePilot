@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CustomerShell } from "@/components/CustomerShell";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,16 @@ import {
   type RazorpayCheckoutSuccess,
 } from "@/lib/razorpay-checkout";
 
+/** How long we show "payment received, confirming..." before soft timeout copy. */
+const CONFIRMING_SOFT_TIMEOUT_MS = 45_000;
+const POLL_INTERVAL_MS = 1_500;
+
 type UiState =
   | { kind: "idle" }
   | { kind: "checkout_open" }
   | { kind: "dismissed" }
   | { kind: "verifying"; payment: RazorpayCheckoutSuccess }
-  | { kind: "authorized"; payment: RazorpayCheckoutSuccess; orderState: string }
+  | { kind: "confirming"; payment: RazorpayCheckoutSuccess; orderState: string; since: number }
   | { kind: "verify_error"; message: string; reasonCode?: string };
 
 function formatPaise(amountInPaise: number, currency: string): string {
@@ -34,8 +38,10 @@ function formatPaise(amountInPaise: number, currency: string): string {
 
 export default function PaymentScreen() {
   const { intentId } = useParams();
+  const navigate = useNavigate();
   const { authFetch, user } = useAuth();
   const [ui, setUi] = useState<UiState>({ kind: "idle" });
+  const [confirmingTimedOut, setConfirmingTimedOut] = useState(false);
   const successHandled = useRef(false);
   const autoOpenedFor = useRef<string | null>(null);
 
@@ -43,12 +49,41 @@ export default function PaymentScreen() {
     queryKey: ["purchase-intent", intentId],
     queryFn: () => getPurchaseIntent(authFetch, intentId ?? ""),
     enabled: Boolean(intentId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      const orderState = query.state.data?.order?.state;
+      if (status === "COMPLETED" || orderState === "COMPLETED") {
+        return false;
+      }
+      if (ui.kind === "confirming") {
+        return POLL_INTERVAL_MS;
+      }
+      return false;
+    },
   });
+
+  const alreadyCompleted =
+    intentQuery.data?.status === "COMPLETED" || intentQuery.data?.order?.state === "COMPLETED";
+
+  useEffect(() => {
+    if (alreadyCompleted && intentId) {
+      navigate(`/shop/${intentId}/success`, { replace: true });
+    }
+  }, [alreadyCompleted, intentId, navigate]);
+
+  useEffect(() => {
+    if (ui.kind !== "confirming") {
+      setConfirmingTimedOut(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setConfirmingTimedOut(true), CONFIRMING_SOFT_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [ui.kind]);
 
   const orderQuery = useQuery({
     queryKey: ["payments-create-order", intentId],
     queryFn: () => createPaymentOrder(authFetch, intentId ?? ""),
-    enabled: Boolean(intentId),
+    enabled: Boolean(intentId) && !alreadyCompleted,
     staleTime: Infinity,
     retry: false,
     refetchOnWindowFocus: false,
@@ -90,11 +125,14 @@ export default function PaymentScreen() {
               try {
                 const result = await verifyPayment(authFetch, response);
                 if (result.verified) {
+                  // Provisional only — success UI waits for backend COMPLETED (webhook).
                   setUi({
-                    kind: "authorized",
+                    kind: "confirming",
                     payment: response,
                     orderState: result.orderState ?? "PAYMENT_AUTHORIZED",
+                    since: Date.now(),
                   });
+                  void intentQuery.refetch();
                   return;
                 }
                 setUi({
@@ -120,20 +158,23 @@ export default function PaymentScreen() {
         setUi({ kind: "verify_error", message });
       }
     },
-    [authFetch, intentQuery.data?.selectedProduct?.name, user?.email, user?.name],
+    [authFetch, intentQuery, user?.email, user?.name],
   );
 
   /** Open Checkout once the order is ready (Pay Now remains as a fallback). */
   useEffect(() => {
-    if (!order) {
+    if (!order || alreadyCompleted) {
       return;
     }
     if (autoOpenedFor.current === order.razorpayOrderId) {
       return;
     }
+    if (ui.kind === "confirming" || ui.kind === "verifying") {
+      return;
+    }
     autoOpenedFor.current = order.razorpayOrderId;
     void launchCheckout(order);
-  }, [order, launchCheckout]);
+  }, [order, launchCheckout, alreadyCompleted, ui.kind]);
 
   const product = intentQuery.data?.selectedProduct;
   const orderErrorMessage =
@@ -224,15 +265,23 @@ export default function PaymentScreen() {
             </p>
           )}
 
-          {ui.kind === "authorized" && (
-            <div className="space-y-3" data-testid="payment-provisional-success">
-              <p className="text-sm text-status-completed">Payment authorized.</p>
+          {ui.kind === "confirming" && (
+            <div className="space-y-3" data-testid="payment-confirming">
+              <p className="text-sm text-status-pending">payment received, confirming...</p>
               <p className="text-sm text-muted-foreground">
-                Signature verified. Capture / completion lands with the Razorpay webhook (Phase 18).
+                Checkout succeeded and the signature was verified. Waiting for the server to confirm
+                capture (Razorpay webhook) before showing success.
               </p>
               <p className="font-mono text-xs text-muted-foreground" data-testid="payment-order-state">
-                {ui.orderState} · payment {ui.payment.razorpay_payment_id}
+                {intentQuery.data?.order?.state ?? ui.orderState} · payment{" "}
+                {ui.payment.razorpay_payment_id}
               </p>
+              {confirmingTimedOut && (
+                <p className="text-sm text-muted-foreground" data-testid="payment-confirming-delayed">
+                  Still confirming. You can leave this page open — we will not mark the order
+                  complete until the backend reports COMPLETED.
+                </p>
+              )}
             </div>
           )}
 

@@ -11,6 +11,7 @@ import ProductComparisonPage from "@/pages/ProductComparison";
 import ProductManagementPage from "@/pages/ProductManagement";
 import PurchaseReviewPage from "@/pages/PurchaseReview";
 import PaymentScreen from "@/pages/PaymentScreen";
+import OrderSuccessPage from "@/pages/OrderSuccess";
 import RegisterPage from "@/pages/Register";
 
 function LandingPage() {
@@ -168,6 +169,14 @@ export default function App() {
         element={
           <ProtectedRoute roles={["customer"]}>
             <PaymentScreen />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shop/:intentId/success"
+        element={
+          <ProtectedRoute roles={["customer"]}>
+            <OrderSuccessPage />
           </ProtectedRoute>
         }
       />

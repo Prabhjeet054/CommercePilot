@@ -10,6 +10,9 @@ import {
 } from "@/lib/api/purchase-intents";
 
 function canStartPayment(view: PurchaseIntentView): boolean {
+  if (view.status === "COMPLETED" || view.order?.state === "COMPLETED") {
+    return false;
+  }
   if (view.status === "POLICY_ALLOWED" || view.status === "APPROVED" || view.status === "ORDER_CREATED") {
     return true;
   }
@@ -96,6 +99,13 @@ export function PurchaseReviewSummary({ view }: { view: PurchaseIntentView }) {
         <Button asChild size="lg">
           <Link to={`/shop/${view.id}/pay`} data-testid="continue-to-payment">
             Pay Now
+          </Link>
+        </Button>
+      )}
+      {(view.status === "COMPLETED" || view.order?.state === "COMPLETED") && (
+        <Button asChild size="lg">
+          <Link to={`/shop/${view.id}/success`} data-testid="view-order-success">
+            View order success
           </Link>
         </Button>
       )}

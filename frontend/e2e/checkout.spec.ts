@@ -285,8 +285,9 @@ test("shoe demo: Checkout success path with official test card + no secret leak"
   expect(verifyResponse.status()).toBe(200);
   const verifyBody = (await verifyResponse.json()) as { verified: boolean; orderState: string };
   expect(verifyBody).toEqual({ verified: true, orderState: "PAYMENT_AUTHORIZED" });
-  await expect(page.getByTestId("payment-provisional-success")).toBeVisible();
+  await expect(page.getByTestId("payment-confirming")).toBeVisible();
   await expect(page.getByTestId("payment-order-state")).toContainText("PAYMENT_AUTHORIZED");
+  await expect(page.getByTestId("order-success")).toHaveCount(0);
 
   const stored = await prisma.order.findUnique({
     where: { purchaseIntentId: intentId },
