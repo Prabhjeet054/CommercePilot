@@ -191,6 +191,9 @@ export default function ProductManagementPage() {
             CP-CONSOLE
           </Link>
           <h1 className="text-lg font-semibold tracking-tight">Product management</h1>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/merchant">Growth</Link>
+          </Button>
         </div>
         <div className="flex items-center gap-4">
           <span className="font-mono text-xs text-muted-foreground">{user?.email}</span>

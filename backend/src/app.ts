@@ -4,6 +4,7 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import { isAllowedFrontendOrigin } from "./lib/cors-origin";
 import type { Env } from "./config/env";
 import { LLMConfigError } from "./lib/llm-provider";
+import { createAnalyticsRouter } from "./modules/analytics/analytics.routes";
 import { createApprovalRouter } from "./modules/approvals/approval.routes";
 import { createAuditRouter } from "./modules/audit/audit.routes";
 import { createAuthRouter } from "./modules/auth/auth.routes";
@@ -66,6 +67,7 @@ export function createApp(config: AppConfig): Express {
   app.use(createApprovalRouter());
   app.use(createPaymentsRouter());
   app.use(createPaymentRetryRouter());
+  app.use(createAnalyticsRouter());
   app.use(createAuditRouter());
   app.use(createExplainRouter());
 

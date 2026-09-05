@@ -9,6 +9,7 @@ import LoginPage from "@/pages/Login";
 import PolicySettingsPage from "@/pages/PolicySettings";
 import ProductComparisonPage from "@/pages/ProductComparison";
 import ProductManagementPage from "@/pages/ProductManagement";
+import MerchantDashboard from "@/pages/MerchantDashboard";
 import PurchaseReviewPage from "@/pages/PurchaseReview";
 import PaymentScreen from "@/pages/PaymentScreen";
 import OrderSuccessPage from "@/pages/OrderSuccess";
@@ -38,9 +39,14 @@ function LandingPage() {
           {isReady && user ? (
             <>
               {user.role === "merchant_admin" && (
-                <Button asChild variant="outline" size="sm">
-                  <Link to="/products">Catalog</Link>
-                </Button>
+                <>
+                  <Button asChild variant="outline" size="sm">
+                    <Link to="/merchant">Growth</Link>
+                  </Button>
+                  <Button asChild variant="outline" size="sm">
+                    <Link to="/products">Catalog</Link>
+                  </Button>
+                </>
               )}
               {user.role === "customer" && (
                 <>
@@ -117,6 +123,14 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route
+        path="/merchant"
+        element={
+          <ProtectedRoute roles={["merchant_admin"]}>
+            <MerchantDashboard />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/products"
         element={
