@@ -60,7 +60,7 @@ function assertMinAmount(paise: number): void {
  */
 export async function createRazorpayOrder(
   orderId: string,
-  client: RazorpayOrdersClient = getRazorpayClient(),
+  client?: RazorpayOrdersClient,
 ): Promise<CreateOrderResult> {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -88,7 +88,8 @@ export async function createRazorpayOrder(
   const paise = amountInPaise(order.amount.toString());
   assertMinAmount(paise);
 
-  const created = await client.createOrder({
+  const rzp = client ?? getRazorpayClient();
+  const created = await rzp.createOrder({
     amount: paise,
     currency: order.currency,
     receipt: order.purchaseIntentId,
@@ -135,7 +136,7 @@ export async function createRazorpayOrder(
 export async function createRazorpayOrderForPurchaseIntent(
   purchaseIntentId: string,
   userId: string,
-  client: RazorpayOrdersClient = getRazorpayClient(),
+  client?: RazorpayOrdersClient,
 ): Promise<CreateOrderResult> {
   const intent = await prisma.purchaseIntent.findUnique({
     where: { id: purchaseIntentId },
@@ -160,8 +161,11 @@ export async function createRazorpayOrderForPurchaseIntent(
     throw new OrderNotPayableError("NOT_PAYABLE");
   }
 
+  // Resolve Razorpay only after ownership/payable gates so config errors cannot mask authz.
+  const rzp = client ?? getRazorpayClient();
+
   if (intent.order) {
-    return createRazorpayOrder(intent.order.id, client);
+    return createRazorpayOrder(intent.order.id, rzp);
   }
 
   const selected = intent.agentRun?.decisions.find((row) => row.selected);
@@ -175,7 +179,7 @@ export async function createRazorpayOrderForPurchaseIntent(
 
   let created;
   try {
-    created = await client.createOrder({
+    created = await rzp.createOrder({
       amount: paise,
       currency: "INR",
       receipt: intent.id,
@@ -223,7 +227,7 @@ export async function createRazorpayOrderForPurchaseIntent(
     // Concurrent create-order: another request won the race — reuse its row.
     const existing = await prisma.order.findUnique({ where: { purchaseIntentId: intent.id } });
     if (existing?.razorpayOrderId) {
-      return createRazorpayOrder(existing.id, client);
+      return createRazorpayOrder(existing.id, rzp);
     }
     throw err;
   }

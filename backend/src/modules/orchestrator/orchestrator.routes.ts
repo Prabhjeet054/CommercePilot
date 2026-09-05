@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma";
 import { requireAuth } from "../../middleware/requireAuth";
 import { requireOwnership } from "../../middleware/requireOwnership";
 import { requireRole } from "../../middleware/requireRole";
+import { purchaseIntentWriteLimiter } from "../../middleware/rateLimit";
 import { uuidParamSchema } from "../catalog/catalog.schema";
 import * as orchestratorController from "./orchestrator.controller";
 
@@ -35,6 +36,7 @@ export function createOrchestratorRouter(): Router {
     "/purchase-intents",
     requireAuth,
     requireRole(["customer"]),
+    purchaseIntentWriteLimiter(),
     wrap(orchestratorController.create),
   );
   router.get(

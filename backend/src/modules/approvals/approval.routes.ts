@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma";
 import { requireAuth } from "../../middleware/requireAuth";
 import { requireOwnership } from "../../middleware/requireOwnership";
 import { requireRole } from "../../middleware/requireRole";
+import { approvalDecisionLimiter } from "../../middleware/rateLimit";
 import * as approvalController from "./approval.controller";
 import { approvalIdParamSchema } from "./approval.schema";
 
@@ -49,6 +50,7 @@ export function createApprovalRouter(): Router {
     requireAuth,
     requireRole(["customer"]),
     requireOwnership(loadApprovalOwnership),
+    approvalDecisionLimiter(),
     wrap(approvalController.decide),
   );
 
