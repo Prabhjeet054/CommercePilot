@@ -11,6 +11,7 @@ import { createCatalogRouter } from "./modules/catalog/catalog.routes";
 import { createOrchestratorRouter } from "./modules/orchestrator/orchestrator.routes";
 import { createPaymentsRouter } from "./modules/payments/payments.routes";
 import { createPolicyRouter } from "./modules/policy/policy.routes";
+import { createExplainRouter } from "./modules/ranking/explain.routes";
 import { createWebhookRouter } from "./modules/webhooks/webhook.routes";
 
 export type AppConfig = Pick<
@@ -64,6 +65,7 @@ export function createApp(config: AppConfig): Express {
   app.use(createApprovalRouter());
   app.use(createPaymentsRouter());
   app.use(createAuditRouter());
+  app.use(createExplainRouter());
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof LLMConfigError) {

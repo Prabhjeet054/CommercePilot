@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CustomerShell } from "@/components/CustomerShell";
 import { useAuth } from "@/lib/auth-context";
+import { ExplainApiError, getDecisionExplanation } from "@/lib/api/explain";
 
 export type TimelineEvent = {
   id: string;
@@ -88,6 +89,13 @@ export default function AgentDecisionTimelinePage() {
     enabled: Boolean(intentId),
   });
 
+  const explainQuery = useQuery({
+    queryKey: ["decision-explain", intentId],
+    queryFn: () => getDecisionExplanation(authFetch, intentId ?? ""),
+    enabled: Boolean(intentId),
+    retry: false,
+  });
+
   return (
     <CustomerShell title="Decision timeline">
       <section className="mx-auto max-w-3xl space-y-6 px-8 py-10">
@@ -105,6 +113,31 @@ export default function AgentDecisionTimelinePage() {
             >
               Order success
             </Link>
+          )}
+        </div>
+
+        <div
+          className="space-y-3 rounded-lg border border-border bg-card p-6"
+          data-testid="timeline-explain-summary"
+        >
+          <p className="font-mono text-xs uppercase tracking-[0.32em] text-primary">Why this decision</p>
+          {explainQuery.isLoading && (
+            <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
+              Loading explanation
+            </p>
+          )}
+          {explainQuery.isError && (
+            <p className="text-sm text-muted-foreground">
+              {explainQuery.error instanceof ExplainApiError &&
+              explainQuery.error.code === "EXPLAIN_NOT_READY"
+                ? "Explanation is not ready yet."
+                : "Could not load explanation."}
+            </p>
+          )}
+          {explainQuery.data && (
+            <p className="text-sm leading-relaxed text-foreground" data-testid="timeline-explain-text">
+              {explainQuery.data.explanation}
+            </p>
           )}
         </div>
 

@@ -3,10 +3,57 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { CustomerShell } from "@/components/CustomerShell";
 import { useAuth } from "@/lib/auth-context";
+import { ExplainApiError, getDecisionExplanation } from "@/lib/api/explain";
 import { formatPrice, getPurchaseIntent, type RankedCandidate } from "@/lib/api/purchase-intents";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 8;
+
+export function WhyThisOnePanel({ intentId }: { intentId: string }) {
+  const { authFetch } = useAuth();
+  const [open, setOpen] = useState(true);
+  const query = useQuery({
+    queryKey: ["decision-explain", intentId],
+    queryFn: () => getDecisionExplanation(authFetch, intentId),
+    enabled: Boolean(intentId),
+    retry: false,
+  });
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4" data-testid="why-this-one">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between text-left"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <p className="font-mono text-xs uppercase tracking-[0.32em] text-primary">Why this one?</p>
+        <span className="font-mono text-[11px] text-muted-foreground">{open ? "Hide" : "Show"}</span>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-2">
+          {query.isLoading && (
+            <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
+              Loading explanation
+            </p>
+          )}
+          {query.isError && (
+            <p className="text-sm text-muted-foreground" data-testid="why-this-one-error">
+              {query.error instanceof ExplainApiError && query.error.code === "EXPLAIN_NOT_READY"
+                ? "Explanation is not ready yet."
+                : "Could not load explanation."}
+            </p>
+          )}
+          {query.data && (
+            <p className="text-sm leading-relaxed text-foreground" data-testid="why-this-one-text">
+              {query.data.explanation}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function RankedCandidatesTable({ candidates }: { candidates: RankedCandidate[] }) {
   const [visible, setVisible] = useState(PAGE_SIZE);
@@ -50,7 +97,10 @@ export function RankedCandidatesTable({ candidates }: { candidates: RankedCandid
                       <p className="font-mono text-[11px] text-muted-foreground">{row.category}</p>
                     </td>
                     <td className="px-3 py-2 font-mono tabular-nums">{formatPrice(row.price)}</td>
-                    <td className="px-3 py-2 font-mono tabular-nums" data-testid={row.selected ? "top-pick-score" : undefined}>
+                    <td
+                      className="px-3 py-2 font-mono tabular-nums"
+                      data-testid={row.selected ? "top-pick-score" : undefined}
+                    >
                       {row.score.toFixed(2)}
                     </td>
                     <td className="px-3 py-2 font-mono text-[11px] uppercase tracking-wide">
@@ -116,13 +166,21 @@ export default function ProductComparisonPage() {
   return (
     <CustomerShell title="Product comparison">
       <section className="mx-auto max-w-5xl space-y-6 px-8 py-10">
-        <Link to={intentId ? `/shop/${intentId}` : "/shop"} className="font-mono text-xs text-primary hover:underline">
+        <Link
+          to={intentId ? `/shop/${intentId}` : "/shop"}
+          className="font-mono text-xs text-primary hover:underline"
+        >
           Back to request
         </Link>
         {query.isLoading && (
-          <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">Loading ranking</p>
+          <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
+            Loading ranking
+          </p>
         )}
-        {query.isError && <p className="text-sm text-destructive">Could not load ranked candidates.</p>}
+        {query.isError && (
+          <p className="text-sm text-destructive">Could not load ranked candidates.</p>
+        )}
+        {intentId && query.data && <WhyThisOnePanel intentId={intentId} />}
         {query.data && <RankedCandidatesTable candidates={query.data.rankedCandidates} />}
       </section>
     </CustomerShell>
