@@ -1,0 +1,13 @@
+{
+  "name": "commercepilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CommercePilot — AI buyer with a financial conscience",
+  "scripts": {
+    "demo:reset": "npm --prefix backend run demo:reset",
+    "test": "npm --prefix backend test",
+    "test:coverage": "npm --prefix backend run test:coverage",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build"
+  }
+}

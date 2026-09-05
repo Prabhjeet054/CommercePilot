@@ -3,6 +3,7 @@ import {
   IllegalTransitionError,
   ORDER_STATES,
   TERMINAL_STATES,
+  applyPurchaseIntentEvent,
   isTerminalState,
   transition,
   type OrderEvent,
@@ -104,5 +105,39 @@ describe("transition (PRD Section 19)", () => {
     }
     expect(isTerminalState("POLICY_ALLOWED")).toBe(false);
     expect(isTerminalState("APPROVAL_PENDING")).toBe(false);
+  });
+});
+
+describe("applyPurchaseIntentEvent", () => {
+  it("rejects a corrupt stored status before writing", async () => {
+    await expect(
+      applyPurchaseIntentEvent("intent-corrupt", "intent_extracted", {
+        purchaseIntent: {
+          findUniqueOrThrow: async () => ({ status: "NOT_A_REAL_STATE" }),
+          update: async () => {
+            throw new Error("update must not run");
+          },
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: "IllegalTransitionError",
+      from: "NOT_A_REAL_STATE",
+      event: "unknown",
+    });
+  });
+
+  it("persists the next state from a legal transition", async () => {
+    let written: string | undefined;
+    const next = await applyPurchaseIntentEvent("intent-ok", "intent_extracted", {
+      purchaseIntent: {
+        findUniqueOrThrow: async () => ({ status: "CREATED" }),
+        update: async ({ data }) => {
+          written = (data as { status: string }).status;
+          return { status: written };
+        },
+      },
+    });
+    expect(next).toBe("INTENT_EXTRACTED");
+    expect(written).toBe("INTENT_EXTRACTED");
   });
 });

@@ -1,11 +1,14 @@
 # CommercePilot
 
-The AI buyer with a financial conscience. Phase 1 scaffolding: Express API, Vite/React frontend, PostgreSQL.
+**The AI buyer with a financial conscience.**
 
-## Prerequisites
+CommercePilot turns a natural-language shopping goal into a structured purchase proposal, ranks catalog products, and — only after a deterministic financial policy engine (and optional human approval) says yes — executes a real Razorpay Test Mode payment. The LLM proposes; it never authorizes money movement.
 
-- Docker with Compose v2 (enough to run the full stack)
-- Node.js 20+ (only needed for local `npm` development outside Docker)
+## Architecture (one sentence)
+
+Intent Agent → Discovery → Ranking → **Policy Engine / Approvals / State Machine** → Payment Service → Checkout → Verify → Webhook → Audit / Explain.
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the LLM-vs-deterministic boundary and state machine.
 
 ## Quick start
 
@@ -16,29 +19,44 @@ docker compose up --build
 Then:
 
 - Frontend: http://localhost:5173
-- Health: `curl http://localhost:3000/health`
+- API health: `curl http://localhost:3000/health`
 
-A machine with only Docker installed does not need to copy `.env`. Compose injects the required backend variables. For host-run development, copy `.env.example` to `.env` first.
-
-## Local development (without Docker for Node)
+Compose applies Prisma migrations on backend boot. Seed / reset demo data from the host:
 
 ```bash
-cp .env.example .env
-docker compose up postgres
-cd backend && npm install && npm run dev
-cd frontend && npm install && npm run dev
+cd backend && npm install && npm run demo:reset
+# or from repo root:
+npm run demo:reset
 ```
 
-Backend tests:
+Compose defaults `LLM_PROVIDER=mock` so the PRD demo phrases work without an OpenAI key. Set `LLM_PROVIDER=openai` and a real `LLM_PROVIDER_API_KEY` for live extraction.
 
-```bash
-cd backend && npm test
-```
+Demo logins (password `password12`):
 
-## TROUBLESHOOTING
+| Email | Role |
+|---|---|
+| `priya@commercepilot.demo` | customer |
+| `arjun@apex.commercepilot.demo` | merchant_admin (Apex Sports) |
 
-**Port 5432 already in use.** `docker compose up` will fail immediately with a bind error such as `Bind for 0.0.0.0:5432 failed: port is already allocated` — it will not hang. Stop the other Postgres (or whatever is bound to 5432), or change the host mapping in `docker-compose.yml` (e.g. `"5433:5432"`) and point `DATABASE_URL` at the new host port.
+## Documentation
 
-**Backend exits on startup.** A missing or invalid required env var (`DATABASE_URL`, `FRONTEND_URL`) throws `EnvValidationError` and exits non-zero. Copy `.env.example` to `.env` and fill in the values, or run via Compose which supplies them.
+| Doc | Contents |
+|---|---|
+| [SETUP.md](./SETUP.md) | Local setup, env vars, migrations, Razorpay webhooks / HTTPS |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Agent pipeline, deterministic gates, payment states |
+| [API.md](./API.md) | Full HTTP endpoint reference |
+| [SECURITY.md](./SECURITY.md) | PRD §22–23 threats, mitigations, dependency notes |
+| [TESTING.md](./TESTING.md) | How to run unit / integration / security / E2E suites |
+| [DEMO_SCRIPT.md](./DEMO_SCRIPT.md) | ~5-minute live demo walkthrough |
+| [HACKATHON_SUBMISSION.md](./HACKATHON_SUBMISSION.md) | Problem, differentiator, metrics, submission placeholders |
 
-**CORS errors from the browser.** The API allows only `FRONTEND_URL` (default `http://localhost:5173`). Requests from any other origin are rejected.
+## Stack
+
+- **Backend:** Express + TypeScript + Prisma + PostgreSQL
+- **Frontend:** Vite + React + Tailwind
+- **Payments:** Razorpay Orders + Standard Checkout + webhooks (Test Mode)
+- **AI:** OpenAI structured-output adapter (tests use an in-process mock)
+
+## License
+
+Hackathon / demo project — see repository owner for distribution terms.

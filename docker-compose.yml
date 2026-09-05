@@ -30,7 +30,7 @@ services:
       JWT_SECRET: phase3-dev-access-secret-change-me
       JWT_REFRESH_SECRET: phase3-dev-refresh-secret-change-me
       COOKIE_SECURE: "false"
-      LLM_PROVIDER: openai
+      LLM_PROVIDER: mock
       LLM_PROVIDER_API_KEY: replace-me
       APPROVAL_TTL_MINUTES: "15"
       RAZORPAY_KEY_ID: rzp_test_replace_me

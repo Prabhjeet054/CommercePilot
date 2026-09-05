@@ -891,6 +891,18 @@ function userId(key: string): string {
   return seedUuid(`user:${key}`);
 }
 
+export function listSeedMerchantIds(): string[] {
+  return SEED_MERCHANTS.map((merchant) => merchantId(merchant.key));
+}
+
+export function listSeedProductIds(): string[] {
+  return SEED_PRODUCTS.map((product) => productId(product.key));
+}
+
+export function listSeedUserEmails(): string[] {
+  return SEED_USERS.map((user) => normalizeEmail(user.email));
+}
+
 export async function seedCatalog(): Promise<SeedSummary> {
   if (productId("apex-stride-runner") !== DEMO_SHOE_PRODUCT_ID) {
     throw new Error("Demo shoe id drifted from catalog.constants");

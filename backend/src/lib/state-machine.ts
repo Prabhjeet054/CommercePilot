@@ -170,9 +170,6 @@ export async function applyPurchaseIntentEvent(
     select: { status: true },
   });
   const next = transition(asState(row.status), event);
-  if (next === row.status) {
-    return next;
-  }
   await db.purchaseIntent.update({
     where: { id: purchaseIntentId },
     data: { status: next },

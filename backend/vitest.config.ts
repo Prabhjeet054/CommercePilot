@@ -9,7 +9,7 @@ export default defineConfig({
     fileParallelism: false,
     coverage: {
       provider: "v8",
-      include: ["src/modules/policy/evaluate.ts"],
+      include: ["src/modules/policy/evaluate.ts", "src/lib/state-machine.ts"],
       reporter: ["text", "json-summary"],
       thresholds: {
         branches: 100,
