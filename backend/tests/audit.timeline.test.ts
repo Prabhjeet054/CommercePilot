@@ -54,6 +54,12 @@ function stubRazorpay(): RazorpayOrdersClient {
         currency: input.currency,
       };
     },
+    async fetchOrder(razorpayOrderId: string) {
+      return { id: razorpayOrderId, status: "created" };
+    },
+    async fetchOrderPayments() {
+      return [];
+    },
   };
 }
 

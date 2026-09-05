@@ -114,3 +114,62 @@ export async function verifyPayment(
     message: typeof body.message === "string" ? body.message : undefined,
   };
 }
+
+export type RetryPaymentResponse = CreateOrderResponse & {
+  orderId: string;
+  orderState: string;
+  reconciliation?: {
+    outcome: string;
+    attemptsThisRun: number;
+    message?: string;
+  };
+};
+
+/**
+ * Phase 22 — resume checkout for an existing order (never creates a new Razorpay order).
+ * May also run status-fetch reconciliation when the order is stuck pending/authorized.
+ */
+export async function retryPaymentOrder(
+  authFetch: AuthFetch,
+  orderId: string,
+): Promise<RetryPaymentResponse> {
+  const response = await authFetch(`/payments/${orderId}/retry`, {
+    method: "POST",
+  });
+  const body = await readBody(response);
+  if (!response.ok) {
+    const code = typeof body.error === "string" ? body.error : "RETRY_FAILED";
+    const message =
+      typeof body.message === "string"
+        ? body.message
+        : code === "RECONCILE_EXHAUSTED"
+          ? "Unable to confirm payment automatically, please check your order history"
+          : "Could not resume payment.";
+    throw new PaymentsApiError(code, message, response.status, {
+      orderState: typeof body.orderState === "string" ? body.orderState : undefined,
+    });
+  }
+  if (
+    typeof body.razorpayOrderId !== "string" ||
+    typeof body.amount !== "number" ||
+    typeof body.currency !== "string" ||
+    typeof body.keyId !== "string" ||
+    typeof body.orderId !== "string" ||
+    typeof body.orderState !== "string"
+  ) {
+    throw new PaymentsApiError("INVALID_RETRY", "Retry payment response was incomplete.", 500);
+  }
+  const reconciliation =
+    body.reconciliation && typeof body.reconciliation === "object"
+      ? (body.reconciliation as RetryPaymentResponse["reconciliation"])
+      : undefined;
+  return {
+    orderId: body.orderId,
+    razorpayOrderId: body.razorpayOrderId,
+    amount: body.amount,
+    currency: body.currency,
+    keyId: body.keyId,
+    orderState: body.orderState,
+    reconciliation,
+  };
+}

@@ -13,6 +13,12 @@ import {
   PaymentVerifyNotFoundError,
   verifyCheckoutPayment,
 } from "./verify";
+import {
+  RECONCILE_EXHAUSTED_MESSAGE,
+  RetryConflictError,
+  RetryNotFoundError,
+  retryPayment as retryPaymentService,
+} from "./retry";
 
 export async function createOrder(req: Request, res: Response): Promise<void> {
   const userId = req.user?.id;
@@ -96,6 +102,42 @@ export async function verifyPayment(req: Request, res: Response): Promise<void> 
         error: "RAZORPAY_NOT_CONFIGURED",
         message: "Razorpay is not configured for signature verification.",
       });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function retryPayment(req: Request, res: Response): Promise<void> {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ error: "UNAUTHORIZED" });
+    return;
+  }
+
+  const orderId = typeof req.params.orderId === "string" ? req.params.orderId : "";
+  if (!orderId) {
+    res.status(400).json({ error: "VALIDATION_ERROR", message: "orderId is required" });
+    return;
+  }
+
+  try {
+    const result = await retryPaymentService(orderId, userId);
+    res.status(200).json(result);
+  } catch (err) {
+    if (err instanceof RetryNotFoundError) {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+    if (err instanceof RetryConflictError) {
+      if (err.message === "RECONCILE_EXHAUSTED") {
+        res.status(409).json({
+          error: "RECONCILE_EXHAUSTED",
+          message: RECONCILE_EXHAUSTED_MESSAGE,
+        });
+        return;
+      }
+      res.status(409).json({ error: err.message });
       return;
     }
     throw err;

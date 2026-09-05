@@ -4,7 +4,9 @@ import { loadEnv } from "../../config/env";
 import { prisma } from "../../lib/prisma";
 import { recordAudit, resolveCorrelationId } from "../audit/audit.service";
 import { applyOrderLifecycleEvent } from "../orders/order.service";
+import { applyCapturedStatus } from "../payments/reconcile";
 import type { OrderState } from "../../lib/state-machine";
+import { IllegalTransitionError } from "../../lib/state-machine";
 
 /** Official Razorpay webhook signature header (docs: Validate and Test Webhooks). */
 export const RAZORPAY_SIGNATURE_HEADER = "x-razorpay-signature";
@@ -84,65 +86,63 @@ function extractRazorpayOrderId(eventType: string, body: Record<string, unknown>
 }
 
 async function finalizeCaptured(orderId: string, current: OrderState): Promise<OrderState> {
-  if (current === "COMPLETED") {
-    return current;
-  }
-  if (current === "PAYMENT_CAPTURED") {
-    return applyOrderLifecycleEvent(orderId, "order_paid_confirmed");
-  }
-  if (
-    current === "ORDER_CREATED" ||
-    current === "PAYMENT_PENDING" ||
-    current === "PAYMENT_AUTHORIZED" ||
-    current === "PAYMENT_FAILED" ||
-    current === "PAYMENT_VERIFICATION_FAILED"
-  ) {
-    await applyOrderLifecycleEvent(orderId, "webhook_captured");
-    return applyOrderLifecycleEvent(orderId, "order_paid_confirmed");
-  }
-  console.warn(
-    JSON.stringify({
-      level: "warn",
-      event: "webhook_capture_ignored_state",
-      orderId,
-      current,
-    }),
-  );
-  return current;
+  return applyCapturedStatus(orderId, current);
 }
 
 async function applyPaymentFailed(orderId: string, current: OrderState): Promise<OrderState> {
-  if (current === "PAYMENT_FAILED" || current === "COMPLETED" || current === "CANCELLED") {
-    return current;
-  }
-  if (current === "PAYMENT_PENDING" || current === "ORDER_CREATED") {
-    if (current === "ORDER_CREATED") {
-      await applyOrderLifecycleEvent(orderId, "checkout_opened");
+  try {
+    if (current === "PAYMENT_FAILED" || current === "COMPLETED" || current === "CANCELLED") {
+      return current;
     }
-    return applyOrderLifecycleEvent(orderId, "payment_failed_webhook");
+    if (current === "PAYMENT_PENDING" || current === "ORDER_CREATED") {
+      if (current === "ORDER_CREATED") {
+        await applyOrderLifecycleEvent(orderId, "checkout_opened");
+      }
+      return await applyOrderLifecycleEvent(orderId, "payment_failed_webhook");
+    }
+    if (current === "PAYMENT_AUTHORIZED") {
+      return await applyOrderLifecycleEvent(orderId, "webhook_failed");
+    }
+    return current;
+  } catch (err) {
+    if (!(err instanceof IllegalTransitionError)) {
+      throw err;
+    }
+    const fresh = await prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
+      select: { state: true },
+    });
+    return fresh.state as OrderState;
   }
-  if (current === "PAYMENT_AUTHORIZED") {
-    return applyOrderLifecycleEvent(orderId, "webhook_failed");
-  }
-  return current;
 }
 
 async function applyPaymentAuthorized(orderId: string, current: OrderState): Promise<OrderState> {
-  if (
-    current === "PAYMENT_AUTHORIZED" ||
-    current === "PAYMENT_CAPTURED" ||
-    current === "COMPLETED"
-  ) {
+  try {
+    if (
+      current === "PAYMENT_AUTHORIZED" ||
+      current === "PAYMENT_CAPTURED" ||
+      current === "COMPLETED"
+    ) {
+      return current;
+    }
+    if (current === "ORDER_CREATED") {
+      await applyOrderLifecycleEvent(orderId, "checkout_opened");
+      return await applyOrderLifecycleEvent(orderId, "signature_verified");
+    }
+    if (current === "PAYMENT_PENDING") {
+      return await applyOrderLifecycleEvent(orderId, "signature_verified");
+    }
     return current;
+  } catch (err) {
+    if (!(err instanceof IllegalTransitionError)) {
+      throw err;
+    }
+    const fresh = await prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
+      select: { state: true },
+    });
+    return fresh.state as OrderState;
   }
-  if (current === "ORDER_CREATED") {
-    await applyOrderLifecycleEvent(orderId, "checkout_opened");
-    return applyOrderLifecycleEvent(orderId, "signature_verified");
-  }
-  if (current === "PAYMENT_PENDING") {
-    return applyOrderLifecycleEvent(orderId, "signature_verified");
-  }
-  return current;
 }
 
 /**

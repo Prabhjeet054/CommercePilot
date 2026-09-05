@@ -46,6 +46,13 @@ const envSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().optional(),
   // Distinct from KEY_SECRET — configured on the Razorpay webhook endpoint.
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+  // Phase 22 — reconciliation (demo defaults; tune for production).
+  // How long an order may sit in PAYMENT_PENDING / PAYMENT_AUTHORIZED before status-fetch.
+  PAYMENT_RECONCILE_TIMEOUT_SECONDS: z.coerce.number().int().min(0).default(60),
+  // Cap on server-side Razorpay status re-checks (never retries order creation).
+  PAYMENT_RECONCILE_MAX_ATTEMPTS: z.coerce.number().int().positive().max(10).default(3),
+  // Comma-separated backoff delays in ms between attempts (e.g. 1000,4000,16000).
+  PAYMENT_RECONCILE_BACKOFF_MS: z.string().default("1000,4000,16000"),
 });
 
 export type Env = z.infer<typeof envSchema>;

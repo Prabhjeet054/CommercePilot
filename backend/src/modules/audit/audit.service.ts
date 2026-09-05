@@ -25,6 +25,8 @@ export const AUDIT_ACTIONS = [
   "webhook_received",
   "order_completed",
   "payment_failed",
+  "payment_reconcile_attempt",
+  "payment_reconcile_exhausted",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -48,6 +48,14 @@ class RecordingRazorpayClient implements RazorpayOrdersClient {
     this.calls.push(input);
     return { id: this.nextId, amount: input.amount, currency: input.currency };
   }
+
+  async fetchOrder(razorpayOrderId: string) {
+    return { id: razorpayOrderId, status: "created" };
+  }
+
+  async fetchOrderPayments() {
+    return [];
+  }
 }
 
 async function registerCustomer() {

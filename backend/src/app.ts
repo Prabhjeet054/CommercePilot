@@ -10,6 +10,7 @@ import { createAuthRouter } from "./modules/auth/auth.routes";
 import { createCatalogRouter } from "./modules/catalog/catalog.routes";
 import { createOrchestratorRouter } from "./modules/orchestrator/orchestrator.routes";
 import { createPaymentsRouter } from "./modules/payments/payments.routes";
+import { createPaymentRetryRouter } from "./modules/payments/retry.routes";
 import { createPolicyRouter } from "./modules/policy/policy.routes";
 import { createExplainRouter } from "./modules/ranking/explain.routes";
 import { createWebhookRouter } from "./modules/webhooks/webhook.routes";
@@ -64,6 +65,7 @@ export function createApp(config: AppConfig): Express {
   app.use(createOrchestratorRouter());
   app.use(createApprovalRouter());
   app.use(createPaymentsRouter());
+  app.use(createPaymentRetryRouter());
   app.use(createAuditRouter());
   app.use(createExplainRouter());
 

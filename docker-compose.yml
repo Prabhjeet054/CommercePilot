@@ -36,6 +36,9 @@ services:
       RAZORPAY_KEY_ID: rzp_test_replace_me
       RAZORPAY_KEY_SECRET: replace-me
       RAZORPAY_WEBHOOK_SECRET: replace-me
+      PAYMENT_RECONCILE_TIMEOUT_SECONDS: "60"
+      PAYMENT_RECONCILE_MAX_ATTEMPTS: "3"
+      PAYMENT_RECONCILE_BACKOFF_MS: "1000,4000,16000"
     depends_on:
       postgres:
         condition: service_healthy

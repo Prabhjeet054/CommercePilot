@@ -20,8 +20,23 @@ export type RazorpayCreatedOrder = {
   currency: string;
 };
 
+/** Subset of GET /v1/orders/:id used for reconciliation. */
+export type RazorpayFetchedOrder = {
+  id: string;
+  status: string;
+};
+
+/** Subset of GET /v1/orders/:id/payments used for reconciliation. */
+export type RazorpayFetchedPayment = {
+  id: string;
+  status: string;
+  order_id: string;
+};
+
 export type RazorpayOrdersClient = {
   createOrder: (input: RazorpayOrderCreateInput) => Promise<RazorpayCreatedOrder>;
+  fetchOrder: (razorpayOrderId: string) => Promise<RazorpayFetchedOrder>;
+  fetchOrderPayments: (razorpayOrderId: string) => Promise<RazorpayFetchedPayment[]>;
 };
 
 export class RazorpayApiError extends Error {
@@ -79,6 +94,12 @@ function createDevStubClient(): RazorpayOrdersClient {
         currency: input.currency,
       };
     },
+    async fetchOrder(razorpayOrderId: string): Promise<RazorpayFetchedOrder> {
+      return { id: razorpayOrderId, status: "created" };
+    },
+    async fetchOrderPayments(): Promise<RazorpayFetchedPayment[]> {
+      return [];
+    },
   };
 }
 
@@ -113,6 +134,30 @@ function createSdkClient(): RazorpayOrdersClient {
         };
       } catch (err) {
         throw new RazorpayApiError("Razorpay Orders API failed", { cause: err });
+      }
+    },
+    async fetchOrder(razorpayOrderId: string): Promise<RazorpayFetchedOrder> {
+      try {
+        const fetched = await instance.orders.fetch(razorpayOrderId);
+        return {
+          id: String(fetched.id),
+          status: String(fetched.status),
+        };
+      } catch (err) {
+        throw new RazorpayApiError("Razorpay Orders fetch failed", { cause: err });
+      }
+    },
+    async fetchOrderPayments(razorpayOrderId: string): Promise<RazorpayFetchedPayment[]> {
+      try {
+        const page = await instance.orders.fetchPayments(razorpayOrderId);
+        const items = Array.isArray(page?.items) ? page.items : [];
+        return items.map((payment) => ({
+          id: String(payment.id),
+          status: String(payment.status),
+          order_id: String(payment.order_id ?? razorpayOrderId),
+        }));
+      } catch (err) {
+        throw new RazorpayApiError("Razorpay order payments fetch failed", { cause: err });
       }
     },
   };
